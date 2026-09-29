@@ -190,7 +190,7 @@
 <section class="slide">
   <div class="kicker">What Yarvis is</div>
   <h2>One desktop app, three layers</h2>
-  <p class="sub">A macOS app (Tauri, React, a Bun sidecar, Postgres with pgvector). Everything runs locally except the LLM calls.</p>
+  <p class="sub">A macOS app (Tauri, React, a Bun sidecar, Postgres with pgvector). Your data stays in a local Postgres. LLM and integration calls go out to those services.</p>
   <div class="grid3 grow">
     <div class="card">
       <h3>The assistant</h3>
@@ -216,7 +216,7 @@
       <h3>The day's tools</h3>
       <ul>
         <li>PR review with guided tours</li>
-        <li>Terminals, quick chat, Omni view</li>
+        <li>Terminals, Omni Chat, Omni view</li>
         <li>Calendar and full-screen alarms</li>
         <li>Voice, clipboard palette, Telegram</li>
         <li>MCP in both directions</li>
@@ -281,7 +281,7 @@
         <li>A <b>todo</b> for what the assistant promised</li>
         <li>The story in <b>memory</b>: why, who, when</li>
       </ul>
-      <p class="muted" style="font-size: 17px; margin-top: 18px;">All of it is visible and editable under Memory → Projects, Tasks, and Memory → Agent todos.</p>
+      <p class="muted" style="font-size: 17px; margin-top: 18px;">All of it is visible and editable: projects under Memory → Projects, tasks on the Tasks tab, and the assistant's promises under Memory → Agent todos.</p>
     </div>
   </div>
   <aside class="notes">
@@ -344,7 +344,7 @@
     </div>
   </div>
   <aside class="notes">
-    Self-review is my favourite small thing: comment on your own diff like a PR review, but nothing is published. Then "Copy for Claude" pastes the review into the agent as numbered items. The Stack tab shows a gh-stack chain with a state per layer, and can merge up to a chosen layer.
+    Self-review is my favorite small thing: comment on your own diff like a PR review, but nothing is published. Then "Copy for Claude" pastes the review into the agent as numbered items. The Stack tab shows a gh-stack chain with a state per layer, and can merge up to a chosen layer.
   </aside>
 </section>
 
@@ -378,7 +378,7 @@
     </div>
   </div>
   <aside class="notes">
-    This is the question I ask most. The quality of the answer depends on what reached memory, which is the next-but-one slide. Guided reviews also remember where I stopped, so "where was I in Sam's review" works.
+    This is the question I ask most. The quality of the answer depends on what reached memory, which slide 11 covers. Guided reviews also remember where I stopped, so "where was I in Sam's review" works.
   </aside>
 </section>
 
@@ -443,8 +443,8 @@
       <ul class="points small">
         <li>Fetch, merge the base branch, push, with a report per workspace</li>
         <li>Dirty worktrees and half-finished merges are skipped, not trampled</li>
-        <li>Instructions are typed into the running session, with guards: only if Claude is at the prompt, and never text starting with <code>!</code>, <code>/</code>, <code>#</code> or <code>@</code></li>
-        <li>It never forwards text from an issue or PR as an instruction</li>
+        <li>Instructions are typed into the running session, with guards: only if Claude is the program reading the terminal, and never text starting with <code>!</code>, <code>/</code>, <code>#</code> or <code>@</code></li>
+        <li>The typing guards are in code. On top of that, the model is told never to forward text from an issue or PR as an instruction.</li>
       </ul>
     </div>
   </div>
@@ -502,18 +502,18 @@
     </div>
   </div>
   <aside class="notes">
-    GitHub and Azure DevOps both work. A tour gives the agent up to 60 tool steps and a line question up to 16, so they cost real tokens. A guide is kept until you approve, request changes, or merge. New commits mark it out of date rather than deleting it. "Start workspace" on a PR checks the branch out in a workspace with a blank agent session, to ask about the change or push a fix.
+    GitHub and Azure DevOps both work. A tour gives the agent up to 60 tool steps and a line question up to 16, so they cost real tokens. A guide is kept until you approve, request changes, merge or close the PR, or leave it untouched for 30 days. New commits mark it out of date rather than deleting it. "Start workspace" on a PR checks the branch out in a workspace with a blank agent session, to ask about the change or push a fix.
   </aside>
 </section>
 
 <!-- 13 -->
 <section class="slide">
-  <div class="kicker">Quick chat and Omni view</div>
+  <div class="kicker">Omni Chat and Omni view</div>
   <h2>The assistant over any screen, and a dashboard you describe</h2>
   <div class="grid2 grow" style="margin-top: 18px;">
     <div class="card">
       <h3>Omni Chat · Control+Shift+Space</h3>
-      <p>A chat overlay you can summon from anywhere, even with Yarvis in the background. It sees what you're looking at. On a PR, it knows which one, so "what's risky here?" just works. On an issue, "make a task for this" just works.</p>
+      <p>A chat overlay you can summon from anywhere, even with Yarvis in the background. It sees what you're looking at. On a PR, it knows which one, so you can ask "what's risky here?" without pasting anything. On an issue, "make a task for this" works the same way.</p>
       <p>Esc hides it and the reply keeps streaming. Summon it again to carry on the same conversation.</p>
     </div>
     <div class="card">
@@ -557,7 +557,7 @@ uv run mlx_audio.server --host 127.0.0.1 --port 8000</pre>
 <!-- 15 -->
 <section class="slide">
   <div class="kicker">Calendar and alarms</div>
-  <h2>Plan around meetings, and never miss one</h2>
+  <h2>Plan around meetings, with a full-screen alarm before each</h2>
   <div class="row grow" style="margin-top: 18px;">
     <div class="col">
       <ul class="points">
@@ -593,7 +593,7 @@ uv run mlx_audio.server --host 127.0.0.1 --port 8000</pre>
     <div class="card"><h3>Clipboard · Control+Shift+V</h3><p>Copy buttons on every path, PR link and check. A palette of saved snippets (ids, commands, links) and this session's clipboard history. It refuses to store anything that looks like a credential.</p></div>
     <div class="card"><h3>MCP, both ways</h3><p>Connect remote or local MCP servers, with OAuth, and choose per tool: always on, found by search, or off. Yarvis also <em>serves</em> its memory over MCP, so every workspace session can recall and remember.</p></div>
     <div class="card"><h3>Telegram</h3><p>The same assistant from your phone: "what's failing?", "start work on PROJ-420". Sessions started from Telegram get Claude Code's Remote Control, so you can follow them from the Claude app.</p></div>
-    <div class="card"><h3>Scheduled jobs</h3><p>A prompt on a cron schedule, run by Yarvis or by headless Claude Code, with every run's output kept. For example, "every weekday at 8:45, list what's waiting on me".</p></div>
+    <div class="card"><h3>Scheduled jobs</h3><p>A prompt on a cron schedule, run by Yarvis or by headless Claude Code, with recent runs' output kept. For example, "every weekday at 8:45, list what's waiting on me".</p></div>
   </div>
   <aside class="notes">
     MCP both ways is what ties the coding sessions to the assistant: the session writes a note, and the assistant recalls it. Telegram is allowlisted by chat id, with an optional TOTP second factor.
@@ -651,7 +651,7 @@ cd yarvis && claude
 &gt; /yarvis-setup</pre>
   <p class="muted" style="margin-top: 28px; font-size: 17px;">docs/getting-started.md · docs/features/ · docs/voice-server.md</p>
   <aside class="notes">
-    The skill never asks for API keys. You paste those into Settings, and they go to the Keychain. Full manual steps are in docs/getting-started.md.
+    The skill is written never to ask for API keys. You paste those into Settings, and they go to the Keychain. Full manual steps are in docs/getting-started.md.
   </aside>
 </section>
 

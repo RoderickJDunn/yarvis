@@ -18,7 +18,7 @@ You need your own Google Cloud OAuth client. This is a one-time setup.
 4. In Yarvis, open **Settings → Credentials**:
    - Enter the client ID in **Google client id** and save.
    - Enter the client secret in **Google client secret** and save. It goes to
-     the Keychain, and the sidecar restarts.
+     your secret store (the Keychain by default), and the sidecar restarts.
 5. Open the **Calendar** tab and press **Connect Google Calendar**. Your browser
    opens Google's consent screen.
 6. Approve it. The browser shows "Calendar connected. You can close this tab."
@@ -43,8 +43,8 @@ The Calendar tab has four views: **Agenda**, **Week**, **Month** and **Day**
 (Day can be vertical or horizontal). Week, Month and Day have **Prev**,
 **Today** and **Next**.
 
-Each event shows its time, a **join** link for Google Meet, and an alarm
-button.
+Each event shows its time and an alarm button. The Agenda, Week and Day views
+also show a **join** link for Google Meet.
 
 ## Ask the assistant
 
@@ -64,14 +64,14 @@ meeting stays with you, in your own calendar.
 ### Set an alarm
 
 - **From the calendar:** press **Set alarm** on an event, or **Set alarms for
-  all** in the Agenda view. The alarm fires **one minute before** the event and
+  all** in the Agenda view, which arms the next 20 upcoming timed events. The alarm fires **one minute before** the event and
   carries the Meet link. All-day events and events that have already started
   can't be armed. Arming the same event twice does nothing.
-- **From the Alarms tab:** press **New alarm**, enter a label and a time, and
-  press **Set**. **Test in 5s** fires a test alarm.
+- **From the Alarms tab:** in the **New alarm** section, enter a label and a
+  time, and press **Set**. **Test in 5s** fires a test alarm.
 
-Alarms are not armed automatically. Arm them each morning, or ask for "set
-alarms for all" in the Agenda view. The assistant has no alarm tool yet.
+Alarms are not armed automatically. Each morning, press **Set alarms for all**
+in the Agenda view. The assistant can't set alarms yet.
 
 ### When an alarm fires
 
@@ -91,7 +91,7 @@ once you've handled them all.
 
 ### Other details
 
-- The **Alarms** tab lists what's **Ringing** (with Snooze and Dismiss) and
+- The **Alarms** tab lists what's **Ringing** (with Snooze, and Dismiss, which acknowledges it) and
   what's **Upcoming** (with Cancel).
 - An alarm whose time passed while Yarvis was closed fires as soon as the app
   starts.

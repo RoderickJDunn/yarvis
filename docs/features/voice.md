@@ -2,7 +2,7 @@
 
 Talk to the assistant and hear it answer. The microphone is on the Chat tab and
 in Omni Chat. A spoken message goes to whatever model that chat is set to, in
-the same conversation, and shows up in the transcript labelled `spoken`.
+the same conversation, and shows up in the transcript labeled `spoken`.
 
 ## Set up
 
@@ -12,10 +12,11 @@ text-to-speech backend.
 - **Local, no key:** run the mlx-audio speech server on your Mac. Follow
   [Running the local speech server](../voice-server.md). It takes about five
   minutes.
-- **Cloud:** a Gemini key covers both halves. A Hugging Face token covers
-  speech to text only.
+- **Cloud:** a Gemini key covers both speech to text and text to speech. A
+  Hugging Face token covers speech to text only.
 
-Then set both halves under **Settings → Voice** and press **Test voice**.
+Then set **Speech to text** and **Text to speech** under **Settings → Voice**
+and press **Test voice**.
 
 ## Use it
 
@@ -35,8 +36,9 @@ The controls beside the microphone:
 - **Stop** ends the turn: it silences speech, drops the recording, and cancels
   the reply.
 
-A recording is capped at 60 seconds. A recording with no speech in it is
-thrown away rather than sent.
+A recording is capped at 60 seconds. When a recording ends on its own (the
+cap, or Hands-free's silence timer) and no speech was heard, it is thrown away
+rather than sent. A recording you stop yourself is always sent.
 
 ## Safety on spoken turns
 
@@ -51,8 +53,8 @@ spoken turn, the assistant asks before anything irreversible:
 - sending an instruction to a running session,
 - delegating to a specialist.
 
-Every MCP tool asks too, even one you set to auto-approve. With Speak replies
-on, the approval is announced aloud. Reading, recalling and creating tasks run
+Every MCP tool asks too, even one you set to auto-approve. The assistant is
+told to warn you that it's waiting on an approval. Reading, recalling and creating tasks run
 without asking.
 
 ## Settings
@@ -62,7 +64,7 @@ Settings → Voice:
 - **Speech to text:** provider, model, and an optional language.
 - **Text to speech:** provider, model and voice.
 - **Speak replies** and **Hands-free** defaults.
-- An advanced section for voice cloning: a **Reference clip** and **Extra
+- **Voice cloning & server-specific fields**: a **Reference clip** and **Extra
   request fields**. See
   [Cloning a voice](../voice-server.md#cloning-a-voice-with-moss-tts-nano).
 

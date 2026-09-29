@@ -1,6 +1,7 @@
 # Keyboard shortcuts
 
-Press **Cmd+/** to see every shortcut in the app, grouped by where it applies.
+Press **Cmd+/** for a cheat sheet of the main shortcuts, grouped by where they
+apply. This page lists them all.
 The keyboard icon in the nav rail opens the same list. Hold **Cmd** for a moment
 to label each nav-rail button with its number.
 
@@ -8,7 +9,7 @@ to label each nav-rail button with its number.
 
 | Keys | Does |
 | --- | --- |
-| Control+Shift+Space | Summon [Omni Chat](quick-chat.md), the quick-chat overlay |
+| Control+Shift+Space | Summon [Omni Chat](quick-chat.md), the chat overlay |
 | Control+Shift+V | Open the [clipboard palette](clipboard.md) |
 
 ## Anywhere in the app
@@ -19,7 +20,7 @@ to label each nav-rail button with its number.
 | Cmd+Shift+] / Cmd+Shift+[ | Next / previous tab, wrapping around |
 | Cmd+/ | Shortcut cheat sheet |
 | Cmd+F | Find on page |
-| Cmd+G / Cmd+Shift+G | Next / previous match |
+| Cmd+G / Cmd+Shift+G | Next / previous match, while Find is open |
 
 Alarms, Jobs, Sessions, Dashboard and Settings have no number. Click them, or
 cycle to them with Cmd+Shift+].

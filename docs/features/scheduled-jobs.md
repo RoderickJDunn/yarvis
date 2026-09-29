@@ -17,7 +17,7 @@ Code installed.
 ## Use it
 
 1. Open the **Jobs** tab. It has no number shortcut, so click it in the nav
-   rail or cycle to it with **Cmd + Shift + ]**.
+   rail or cycle to it with **Cmd+Shift+]**.
 2. Create a job and fill in:
    - **Schedule.** A cron expression in this machine's local time. For
      example, `0 9 * * 1-5` is 9:00 on weekdays. The editor offers a few
@@ -33,16 +33,16 @@ Other controls:
 - A job you switch off keeps its history and can still be run by hand.
 
 A new job does **not** run as soon as you save it. It waits for its next
-scheduled time. A prompt you save at 17:00 shouldn't immediately fire the
-08:45 sweep.
+scheduled time. For example, a job set for 08:45 that you save at 17:00 first
+runs at 08:45 the next day.
 
 ### Choosing the agent
 
 There are two kinds:
 
 - **Yarvis.** The default assistant, or one of your specialists. The default
-  assistant gets its always-on tools (tasks, memory, projects, todos, activity,
-  planning) but can't delegate. A job has nobody watching it, so it gets no
+  assistant gets the tools that are always available (tasks, memory, projects,
+  todos, activity, planning) but can't delegate. A job has nobody watching it, so it gets no
   MCP tools either.
 - **Claude Code.** A headless Claude Code session (`claude -p`) in a directory
   you name. You can also set a model and a permission mode.
@@ -66,8 +66,9 @@ Other limits on a Claude Code job:
 
 - Like a delegated Yarvis run, it gets no MCP servers and can't start
   subagents.
-- It launches the program from **Settings → Repositories → Agent**. The flags
-  there are for interactive sessions and aren't reused.
+- It runs the program named in the agent command (**Settings → Repositories →
+  Agent**, for example `claude`), but not that command's flags, which are meant
+  for interactive sessions.
 - It doesn't inherit the app's environment. The provider keys and the
   sidecar's own token stay out of its reach.
 

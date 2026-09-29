@@ -8,8 +8,8 @@ Yarvis keeps its configuration in three places, split by what the value is:
 | Everything else you change from the UI | `~/.yarvis/settings.json` | The Settings screen, or by hand |
 | Machine-level overrides | Environment variables | Your shell, before `bun run tauri dev` |
 
-Your data (chat history, memory, tasks, workspaces, PR notes) is none of these.
-It lives in Postgres.
+Your data (chat history, memory, tasks, workspaces, PR notes) isn't
+configuration. It lives in Postgres.
 
 Secrets never go in env files or in the repo.
 
@@ -45,6 +45,10 @@ The Telegram chat-id allowlist isn't a credential, but it stays in the Keychain.
 With the OTP second factor off, it is the bot's only access check, so it
 shouldn't be a plain, freely editable setting.
 
+Cerebras takes only a key. Its endpoint is fixed, and Yarvis talks to it
+through its OpenAI-compatible `/chat/completions` API, so there is no base URL
+to set.
+
 AWS Bedrock uses the standard AWS credential chain (`~/.aws`, `AWS_PROFILE`,
 `AWS_REGION`, default region `us-east-1`), not a Keychain entry.
 
@@ -55,12 +59,22 @@ AWS Bedrock uses the standard AWS credential chain (`~/.aws`, `AWS_PROFILE`,
   request and issue access. Merging a stack needs write access to the repo.
 - **Azure DevOps.** A PAT with **Code (read)** and **Pull Request Threads (read &
   write)**. Set the organization URL (`https://dev.azure.com/your-org`) under
-  Settings → Credentials. Code search needs the **Code Search** extension
+  Settings → Credentials. The project is picked per search, so there is
+  nothing else to set. Code search needs the **Code Search** extension
   installed in your organization. Without it, guided review still works, but
   the agent can't search the repo.
 - **JIRA.** Atlassian Cloud only. Create the token at id.atlassian.com →
   Security → API tokens. Set your site URL (`https://your-org.atlassian.net`)
   and account email under Settings → Credentials.
+
+### Upgrading from an older build
+
+Older builds stored one Keychain item per secret. Re-save each secret once in
+Settings to fill the single item, then delete the old items in Keychain Access
+if you like. The non-secret values that used to be in the Keychain (org URLs,
+the JIRA email, the Google client id, the OTP window) move to
+`~/.yarvis/settings.json` by themselves on the first launch. So does the old
+`embeddings_provider_secrets` item, which is folded into the single item.
 
 ### Touch ID
 
@@ -89,8 +103,8 @@ How switching works:
   you were using.
 - The item is created as a Secure Note if it doesn't exist.
 - **A store that already holds secrets is never overwritten**, and the old
-  store keeps its copy. Switching back doesn't re-copy, so any secret you
-  changed in the meantime is the older value there. Settings tells you which
+  store keeps its copy. Switching back doesn't copy anything, so the old store
+  still has the values from before you switched. Settings tells you which
   case happened: copied, nothing to copy, or target already occupied.
 
 Writes pass the secrets to `op` on standard input, never as command arguments.
@@ -110,23 +124,17 @@ secret. Both the Rust core and the sidecar read and write it.
   `bun run dev:instance` copies.
 
 [`settings.example.json`](settings.example.json) is a starter file with every
-common key set to its default. Copy it into place if you want a file to edit by
+common key set to its default (`null` also means "use the default"). Copy it into place if you want a file to edit by
 hand:
 
 ```bash
 mkdir -p ~/.yarvis && chmod 700 ~/.yarvis
-cp docs/settings.example.json ~/.yarvis/settings.json
+cp -n docs/settings.example.json ~/.yarvis/settings.json
 chmod 600 ~/.yarvis/settings.json
 ```
 
-Don't copy it over a file you already have. The app has written your
-providers and MCP servers into that one.
-
-> **Known issue.** Saving a setting the Rust core owns (the agent command,
-> the terminal cap, the Azure, JIRA, Google or Telegram fields, or the secret
-> store) rewrites the file with only the Rust core's keys. That drops the
-> sidecar's sections listed further down, such as your custom providers and
-> voice setup. Back up the file before changing those fields.
+`cp -n` won't overwrite a file you already have. That matters, because the app
+has written your providers and MCP servers into it.
 
 ### Keys the Rust core owns
 
@@ -134,7 +142,7 @@ providers and MCP servers into that one.
 | --- | --- | --- |
 | `agentName` | `"Claude"` | Title of a workspace's agent tab |
 | `agentCommand` | `"claude --permission-mode auto"` | The command a workspace's agent session runs. Add a model or permission flags here. `YARVIS_CLAUDE_COMMAND` overrides it. |
-| `maxPtySessions` | `60` | Most terminal sessions that can be live at once, from 1 to 1000 |
+| `maxPtySessions` | `60` | Maximum number of open terminal sessions (1–1000) |
 | `secretBackend` | `"keychain"` | `"keychain"` or `"onepassword"` |
 | `onePasswordVault`, `onePasswordItem` | unset | Where the secrets item lives when using 1Password |
 | `azureDevopsOrgUrl` | unset | `https://dev.azure.com/your-org` |
@@ -152,10 +160,10 @@ providers and MCP servers into that one.
 | `customProviders` | Your OpenAI- or Anthropic-compatible endpoints, keyed by id | Settings → LLM Providers |
 | `providerModels` | Your edited model list per provider. Replaces the built-in list for that provider once saved. | Settings → LLM Providers → Models |
 | `mcpServers` | MCP servers Yarvis connects to, keyed by id | Settings → Tools & MCP |
-| `chatConfig` | `maxSteps` (100), `maxOutputTokens` (none), `compactAtTokens` (200000) | Settings → Assistant → Turn budget |
+| `chatConfig` | `maxSteps` (100, up to 500), `maxOutputTokens` (none, up to 200000), `compactAtTokens` (200000, from 10000 to 2000000). A model's own compaction threshold in its catalog entry wins over `compactAtTokens`. | Settings → Assistant → Turn budget |
 | `complexityModels` | The provider and model behind the `low`, `medium` and `max` tiers specialists can ask for | Settings → Assistant |
 | `githubPrConfig` | `reviewQuery` for the Needs review tab, `reviewingLookbackDays` for Reviewing | Settings → PR review |
-| `wipConfig` | Which sources feed the in-progress list, and a GitHub issue label filter | Settings → Work in progress |
+| `wipConfig` | Which sources feed the **In progress** list in the attention panel (the bell in the top bar), and a GitHub issue label filter | Settings → Work in progress |
 | `jobConfig` | `ccDigestEnabled` and `ccDigestProjectDirs` for the Claude Code transcript digest | Settings → Assistant |
 | `voiceConfig` | Speech providers and models, voice, speak replies, hands-free | Settings → Voice |
 | `embeddingsConfig` | The embeddings endpoint | Settings → Embeddings |
@@ -166,11 +174,23 @@ from the UI rather than by hand.
 `githubPrConfig` and `jobConfig` are read as whole objects. If you edit them by
 hand, include every field, as the example file does.
 
+> **Known issue.** Saving a setting the Rust core owns (the agent command,
+> the terminal cap, the Azure, JIRA, Google or Telegram fields, or the secret
+> store) rewrites the file with only the Rust core's keys. That drops the
+> sidecar's sections in the table above, such as your custom providers and
+> voice setup. It also drops the `structuralSettingsMigrated` flag, so the
+> next sidecar start re-runs a one-time migration that copies older settings
+> from Postgres back into the file. Back up the file before changing those
+> fields.
+
+
 ## Embeddings
 
 Memory search uses vector embeddings stored in the `memories.embedding` column,
-which is `vector(1536)`. Whatever embedder is active must output 1536
-dimensions, and longer output is truncated to fit.
+which is `vector(1536)`. Yarvis asks the embeddings provider for 1536
+dimensions, so the model must either produce 1536 natively or support
+shortened output (Matryoshka models such as Qwen3, Gemini and OpenAI's
+`text-embedding-3` do).
 
 Yarvis picks the embedder in this order:
 
@@ -183,8 +203,9 @@ Yarvis picks the embedder in this order:
    lower.
 
 Each memory records which embedder made its vector. When you change
-providers, Settings shows a "re-embed needed" warning. **Re-embed all** in
-Settings regenerates every vector.
+providers, Settings → Embeddings warns that some memories were made by a
+different embedder. **Re-embed all** there (or `POST /api/memory/reembed`)
+regenerates every vector.
 
 ## Environment variables
 
@@ -205,6 +226,8 @@ copy of the app, or for debugging.
 | `YARVIS_DEBUG_MEMORY` | `1` logs memory store operations |
 | `YARVIS_SETTINGS_PATH` | A different settings file, for the sidecar only. The Rust core ignores it. |
 | `YARVIS_AGENTS_DIR` | A different directory for your specialist definitions. Default `~/.yarvis/agents`. |
+| `YARVIS_LOG_DEV_TOKEN` | `1` makes a standalone sidecar (`bun run sidecar:dev`) print its API token instead of a fingerprint |
+| `TAURI_DEV_HOST` | Serve the Vite dev server on this host. Also turns on the HMR socket port. |
 | `CLAUDE_HOME` | Where Claude Code keeps sessions. Default `~/.claude`. |
 | `AWS_PROFILE`, `AWS_REGION`, … | The usual AWS credential chain, for Bedrock |
 
@@ -221,14 +244,15 @@ The tabs in **Settings**, in order:
 2. **LLM Providers.** Each provider's model list and capability tags, and your
    custom providers.
 3. **Tools & MCP.** MCP servers Yarvis connects to, Yarvis's own MCP endpoint,
-   and the Tool Manager.
+   and the Tool manager.
 4. **Repositories.** The repos workspaces can use, the workspace agent
    command, and the terminal cap.
 5. **PR review.** The Needs review search and the Reviewing lookback.
 6. **Voice.** Speech to text and text to speech.
 7. **Embeddings.** The embeddings endpoint.
 8. **Telegram.** Bot token, allowed chats, and the optional second factor.
-9. **Work in progress.** Which sources feed the in-progress list.
+9. **Work in progress.** Which sources feed the **In progress** list in the
+   attention panel.
 10. **Assistant.** Turn budget, complexity tiers, specialists, and background
     jobs.
 11. **Diagnostics.** The sidecar log.

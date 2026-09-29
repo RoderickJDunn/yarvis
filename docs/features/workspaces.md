@@ -7,6 +7,17 @@ one per ticket or PR, without them stepping on each other's checkouts. Yarvis
 tracks each workspace's pull requests and CI, and tells you when a session is
 waiting on you.
 
+On this page:
+
+- [Set up](#set-up)
+- [Create a workspace](#create-a-workspace) and [what provisioning does](#what-provisioning-does)
+- [The agent tab](#the-agent-tab)
+- [The workspace list](#the-workspace-list) and its PR badges
+- [The right column](#the-right-column): files, diffs, self-review, PR checks, stacks
+- [Working across workspaces with the assistant](#working-across-workspaces-with-the-assistant)
+- [Archiving](#archiving)
+- [The attention bell](#the-attention-bell)
+
 ## Set up
 
 1. Install [Claude Code](https://claude.com/claude-code). Each workspace runs
@@ -19,8 +30,8 @@ waiting on you.
    - **Run script** (optional). It adds a **Run** button that starts the app,
      for example `bun run dev`.
    - **Pull issues**. Tick it to show the repo's issues on the Issues tab.
-3. Optional: install the GitHub CLI and the stack extension for the Stack tab's
-   grouping and merge button:
+3. Optional: install the GitHub CLI and the stack extension for the
+   [Stack tab](#stacked-pull-requests)'s grouping and merge button:
    ```bash
    brew install gh
    gh extension install github/gh-stack
@@ -71,13 +82,14 @@ See [The assistant](assistant.md).
 ### What provisioning does
 
 Creating a workspace starts provisioning in the sidecar. For each repo it
-clones the repo (once, then reuses the clone), cuts a worktree, and runs the
-setup script. The workspace shows the log while this runs.
+clones the repo (once, then reuses the clone), creates a git worktree, and runs
+the setup script. The workspace shows the log while this runs.
 
 Provisioning runs in the background. You can leave the screen and come back:
-reopening the workspace rejoins the run and its log. A kick-off (from "Start
-work", a task, or the assistant) is held by the sidecar too, so it still
-launches the agent once provisioning finishes.
+reopening the workspace rejoins the run and its log. If the workspace was
+started from **Start work**, a task, or the assistant, the sidecar still
+launches the agent on that work once provisioning finishes, even if you've left
+the screen.
 
 Claude starts at the workspace root, not inside one repo. So provisioning also
 writes these files into the root:
@@ -93,16 +105,16 @@ writes these files into the root:
 
 Some details:
 
-- **Skills and agents are copied** because Claude Code only finds them under
-  the folder it starts in. The `skills.paths` and `agents.paths` settings keys
-  load nothing.
+- **Skills and agents are copied** because Claude Code only loads them from the
+  folder it starts in, and has no setting to load them from elsewhere.
 - **Name clashes.** When two repos ship the same skill or agent name, both
   copies get the repo's folder name as a prefix. The same happens when a repo's
   entry clashes with one you added to the workspace root yourself. A renamed
   agent's frontmatter `name` is rewritten to match, because that is the name an
   agent answers to.
-- **Copies are refreshed on every provision.** The manifest means a repo that
-  leaves the workspace takes its copies with it. Anything you added by hand is
+- **Copies are refreshed on every provision.** Because
+  `.claude/.yarvis-copied.json` lists every copy, a repo that leaves the
+  workspace takes its copies with it. Anything you added by hand is
   left alone.
 - **`.claude/settings.json` and `.mcp.json` are merged, not overwritten.**
   Other keys and other MCP servers you have there stay.
@@ -113,14 +125,14 @@ Some details:
 A failed provision opens on the failed repo's setup log, with two buttons:
 
 - **Retry provisioning** picks up where the run stopped. Worktrees that were
-  already cut are reused, so the retry doesn't fail on the step that worked.
+  already created are reused, so the retry doesn't fail on the step that worked.
 - **Ignore and use anyway** puts the workspace back in service. The agent
   session starts, the failed repos keep their error badges and logs, and retry
   stays on offer. A workspace started from a ticket still starts its session
   on that ticket.
 
-If the workspace was started on some work, that work waits behind "Retry
-provisioning" until provisioning succeeds or you ignore the error.
+Work a workspace was started on doesn't begin until provisioning succeeds or
+you press **Ignore and use anyway**.
 
 ### The agent tab
 
@@ -128,13 +140,11 @@ Every workspace opens with one tab: the agent. Opening the workspace starts a
 Claude Code session in it, or attaches to the one already running, and focuses
 that tab. No shell tab opens with it. Press `+` or Cmd+T when you want one.
 
-- **Closing the agent tab kills its session.** Nothing reopens it while you
-  stay on that workspace.
-- **The close lasts for one visit.** Switching to another workspace (or
-  another nav tab) and back counts as opening it again, and starts a fresh
-  session.
-- **The start-session button** in the header brings a session back right
-  away.
+- **Closing the agent tab ends its session.** It stays closed until you leave
+  the workspace.
+- **Coming back starts a new session.** Returning from another workspace or
+  another nav rail tab counts as opening the workspace again.
+- **To bring it back sooner,** press the start-session button in the header.
 
 Workspace tabs are terminals, so everything in [Terminals](terminals.md)
 applies, including splits. A workspace's tabs can also hold diffs, the file
@@ -147,9 +157,9 @@ the Claude mobile app. Yarvis turns it on only for sessions started from
 [Telegram](telegram.md), by adding `--remote-control <session name>` to the
 command, since you're away from the machine then.
 
-Sessions started at the laptop don't get it: opening a workspace, "Start
-work", or asking the in-app assistant. They open in a tab you are already
-looking at. Turn on Remote Control from inside the session if you need it
+Sessions you start at the laptop (by opening a workspace, pressing **Start
+work**, or asking the in-app assistant) don't get it. They open in a tab you
+are already looking at. Turn on Remote Control from inside the session if you need it
 later. Leaving it off by default also means a non-Claude agent command isn't
 handed a flag it doesn't know.
 
@@ -196,13 +206,13 @@ The column beside the terminals shows the workspace's files and PR state.
 
 **All files** lists the worktree. Clicking a file opens it in an editor tab.
 The editor is CodeMirror with the file's own syntax highlighting. A file type
-it doesn't know opens without colours.
+it doesn't know opens without colors.
 
 Binary files, files that aren't valid UTF-8, and files over 2 MB are described
 instead of opened. Saving one back would rewrite bytes the editor never showed
 you.
 
-- **⌘S** (or **Save**) writes the file back to the worktree.
+- **Cmd+S** (or **Save**) writes the file back to the worktree.
 - Edits live outside the tab. Switching tabs keeps what you typed, and the tab
   is marked while it has unsaved changes. Closing it asks first.
 - **Revert** throws your edits away and re-reads the file.
@@ -288,8 +298,8 @@ layer targets the one below it, with main at the bottom. Every layer shows a
 one-glyph state, using the same glyphs as the workspace list: merged, queued,
 draft, checks failing, changes requested, approved. Two extra states exist
 only here: a branch `gh stack` tracks that has no PR yet, and a layer whose
-status couldn't be read. So the layer holding up the rest is visible without
-opening any of them.
+status couldn't be read. That way you can see which layer is holding up the
+rest without opening each PR.
 
 Clicking a layer opens it in the PRs tab. A branch with no PR has nothing to
 open.
@@ -400,13 +410,10 @@ Claude Code session blocked on a permission prompt or sitting idle waiting for
 input. The hooks Yarvis writes into each workspace's `.claude/settings.json`
 raise these.
 
-Items are tied to the exact terminal that raised them. Terminals the app can
-navigate back to (a workspace's tabs and the Terminal tab's tabs) carry
-`YARVIS_SESSION_KEY`, plus `YARVIS_WORKSPACE_ID` in a workspace, and a token
-that can only create attention items. So a Claude run you started by hand in
-one of a workspace's shell tabs flags *that tab*, not the whole workspace. The
-same terminals carry the MCP token, so they are also the ones that can reach
-Yarvis memory.
+Items are tied to the exact terminal that raised them, so a Claude run you
+started by hand in one of a workspace's shell tabs flags *that tab*, not the
+whole workspace. [Terminals](terminals.md#attention-and-yarvis-memory) lists
+the environment variables that make this work.
 
 How the bell behaves:
 

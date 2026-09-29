@@ -5,6 +5,8 @@ today's calendar and my tasks", and the model lays out live Yarvis widgets to
 match. You can save a layout and load it later, which makes it a good way to
 build a personal dashboard, or a review screen for one PR.
 
+Omni view is not the same as [Omni Chat](quick-chat.md), the chat overlay.
+
 Open it from the **Omni** tab (Cmd+2).
 
 ## Use it
@@ -44,14 +46,15 @@ The model can only use these widgets:
 | Pull requests | PullRequests (the full list) |
 | One PR (GitHub) | PrDescription, PrChecks, PrFileList, PrFileDiffs |
 | Work | WorkspaceList, Workspace, Terminal, Sessions |
-| Other | Chat, Settings (the status dashboard) |
+| Other | Chat, Settings (the same status view as the Dashboard) |
 
 The one-PR widgets take an owner, repo and number, and widgets for the same PR
 share their data. Clicking a file in a PrFileList jumps to it in the
 PrFileDiffs beside it. Most widgets take a height, so two can scroll on their
 own.
 
-Each widget shows a small badge with its type.
+Each widget except Terminal shows a small badge with its type. A Terminal
+widget takes a session id and always uses its default height.
 
 ## Limits
 

@@ -4,9 +4,11 @@ This guide takes a new Mac from nothing to a running dev build of Yarvis with
 a working chat. It takes about 30 minutes, most of it waiting on installs and
 the first Rust compile.
 
-Prefer to be walked through it? Open Claude Code in the repo and run
-`/yarvis-setup`. The skill checks each step below, runs the commands with your
-OK, and tells you what to enter in the app. See
+Prefer to be walked through it? Install
+[Claude Code](https://claude.com/claude-code), clone the repo
+(`git clone https://github.com/bennettaur/yarvis.git && cd yarvis`), run
+`claude`, and type `/yarvis-setup`. The skill checks each step below, runs the
+commands once you approve them, and tells you what to enter in the app. See
 [Set up with Claude Code](#set-up-with-claude-code).
 
 ## What you are setting up
@@ -34,7 +36,7 @@ Required:
 | [Homebrew](https://brew.sh) | Installs Postgres and the other tools | `brew --version` |
 | [Bun](https://bun.com) | Runs the frontend build and the sidecar | `bun --version` |
 | [Rust](https://rustup.rs) | Builds the Tauri core | `cargo --version` |
-| PostgreSQL 17 + pgvector | Stores chat, memory, workspaces and more | `psql --version` |
+| PostgreSQL 16 or later (17 recommended) + pgvector | Stores chat, memory, workspaces and more | `psql --version` |
 | An LLM provider | An Anthropic, Gemini or Cerebras API key, AWS credentials for Bedrock, or an OpenAI-compatible endpoint | — |
 
 Needed for some features:
@@ -54,7 +56,7 @@ Install the Xcode Command Line Tools if `xcode-select -p` prints an error:
 xcode-select --install
 ```
 
-The repo pins Bun and Rust in `mise.toml`, so the simplest way to get both is
+The repo lists Bun and Rust in `mise.toml`, so the simplest way to get both is
 [mise](https://mise.jdx.dev):
 
 ```bash
@@ -87,11 +89,9 @@ brew services start postgresql@17
 on your `PATH`. Add them:
 
 ```bash
-echo 'export PATH="/opt/homebrew/opt/postgresql@17/bin:$PATH"' >> ~/.zshrc
+echo "export PATH=\"$(brew --prefix postgresql@17)/bin:\$PATH\"" >> ~/.zshrc
 exec zsh
 ```
-
-(On an Intel Mac, Homebrew lives in `/usr/local` instead of `/opt/homebrew`.)
 
 Check that the server is up:
 
@@ -115,6 +115,15 @@ postgres://localhost:5432/yarvis
 
 You enter that URL in the app in step 5. The app creates the tables itself the
 first time it connects.
+
+Homebrew's Postgres only listens on your own machine, so the network can't
+reach it. It does trust every local connection, though. Any program running as
+any user on your Mac can read the database, which holds your chat history and
+memories. If that matters to you, give your role a password and switch
+`trust` to `scram-sha-256` in `$(brew --prefix)/var/postgresql@17/pg_hba.conf`,
+then restart Postgres. The URL becomes
+`postgres://USER:PASSWORD@localhost:5432/yarvis`. Enter it only in the app's
+Settings screen, never on the command line.
 
 ## 3. Clone the repo and install dependencies
 
@@ -148,24 +157,26 @@ it quits the app.
 ## 5. First configuration
 
 The app starts with nothing configured. Open **Settings** (the gear at the
-bottom of the left rail) and do these three things.
+bottom of the nav rail on the left) and do these three things.
 
 1. **Connect the database.** Go to **Settings → Credentials**. In **Database
    URL**, enter `postgres://localhost:5432/yarvis` and press **Save**. The
    sidecar restarts and creates its tables. You see "Preparing your
    database…" for a moment.
-2. **Add an LLM provider.** In the same list, save one of these:
+2. **Add an LLM provider.** On the same Credentials tab, save one of:
    - **Anthropic API key** (`sk-ant-…`) from the
      [Anthropic Console](https://console.anthropic.com). This is the best-tested
      option.
    - **Gemini API key** (`AIza…`). This also gives you embeddings for memory
      search and cloud voice.
    - **Cerebras API key** (`csk-…`).
-   - AWS Bedrock needs no key in Yarvis. It uses your normal AWS credentials
-     (`~/.aws`, `AWS_PROFILE`, `AWS_REGION`, which defaults to `us-east-1`).
-   - Any OpenAI-compatible or Anthropic-compatible endpoint (LiteLLM, Ollama, a
-     company gateway) goes under **Settings → LLM Providers → Add**.
-3. **Check it works.** Open **Dashboard** (bottom of the rail). **Database**
+
+   There are two other options. AWS Bedrock needs no key in Yarvis: it uses
+   your normal AWS credentials (`~/.aws`, `AWS_PROFILE`, and `AWS_REGION`,
+   which defaults to `us-east-1`). For an OpenAI- or Anthropic-compatible
+   endpoint (LiteLLM, Ollama, a company gateway), use **Settings → LLM
+   Providers → Add provider** instead.
+3. **Check it works.** Open **Dashboard** (bottom of the nav rail). **Database**
    should say reachable, and your provider's dot should be lit. Then open
    **Chat** (Cmd+1), pick the provider and a model at the top, and say hello.
 
@@ -180,7 +191,7 @@ Each integration is independent. Set up the ones you need, in any order.
 
 | Feature | What to do | Guide |
 | --- | --- | --- |
-| GitHub PRs and issues | Save a **GitHub token** in Settings → Credentials. A classic PAT needs `repo`. A fine-grained one needs Contents: Read plus pull request and issue access. | [PR review](features/pr-review.md) |
+| GitHub PRs and issues | Save a **GitHub token** in Settings → Credentials. See [token scopes](configuration.md#token-scopes). | [PR review](features/pr-review.md) |
 | Workspaces | Install Claude Code, then add repos under **Settings → Repositories**. | [Workspaces](features/workspaces.md) |
 | Azure DevOps PRs | Save an **Azure DevOps token** and set the organization URL under Settings → Credentials. | [PR review](features/pr-review.md) |
 | JIRA | Save a **JIRA API token** and set the base URL and account email. | [Issues and tasks](features/issues-and-tasks.md) |
@@ -189,7 +200,7 @@ Each integration is independent. Set up the ones you need, in any order.
 | Voice | Run the local speech server and point Settings → Voice at it. | [Voice server](voice-server.md) |
 | MCP servers | Add servers under **Settings → Tools & MCP**. | [MCP](features/mcp.md) |
 | Telegram | Create a bot with @BotFather and save its token. | [Telegram](features/telegram.md) |
-| Session digests | Turn on the transcript digest under **Settings → Assistant** so the assistant learns what happened in your Claude Code sessions. | [The assistant](features/assistant.md) |
+| Transcript digest | Turn on the transcript digest under **Settings → Assistant** so the assistant learns what happened in your Claude Code sessions. | [The assistant](features/assistant.md) |
 
 Once you have a provider and GitHub set up, read
 [The assistant](features/assistant.md). It explains the weekly workflow the
@@ -246,16 +257,17 @@ with filters by level and scope, and a button to copy it.
 
 ## Nightly builds
 
-The [`nightly` release](https://github.com/bennettaur/yarvis/releases/tag/nightly)
-publishes a `.dmg`. Release builds don't bundle the sidecar yet: `sidecar.rs`
-looks for a `yarvis-sidecar` binary that packaging doesn't produce. Use the dev
-build above until that lands. [Development](development.md#nightly-builds)
-covers opening an unnotarized nightly.
+A `.dmg` is published to the
+[`nightly` release](https://github.com/bennettaur/yarvis/releases/tag/nightly),
+but it doesn't run yet, because release builds don't bundle the sidecar. Use
+the dev build above. [Development](development.md#nightly-builds) has the
+details.
 
 ## Set up with Claude Code
 
-The repo ships a Claude Code skill at `.claude/skills/yarvis-setup/`. From the
-repo root:
+You need [Claude Code](https://claude.com/claude-code) installed and the repo
+cloned (step 3), because the skill lives inside the repo at
+`.claude/skills/yarvis-setup/`. From the repo root:
 
 ```bash
 claude
@@ -269,8 +281,7 @@ Then type `/yarvis-setup`. It:
 4. walks you through the Settings screen, one step at a time,
 5. can also set up the local speech server.
 
-The skill never asks for your API keys. You paste those into the app's
-Settings screen yourself, so they go straight to the Keychain.
-
-If you haven't cloned the repo yet, clone it first (step 3). The skill lives
-inside it.
+The skill is written to never ask for your API keys. You paste those into the
+app's Settings screen yourself, so they go straight to the Keychain. If you
+paste one into Claude Code anyway, it is sent to Anthropic with the rest of
+the conversation.

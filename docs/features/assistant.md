@@ -3,15 +3,15 @@
 The Yarvis assistant is the chat agent at the center of the app. It knows your
 projects and their priorities. It keeps your task list and a log of what you
 actually did. It can start work in a workspace and hand follow-ups to the
-Claude Code sessions running there. The idea is simple: tell it what matters
-this week, then keep asking it where you are and what's next.
+Claude Code sessions running there. Tell it what matters this week, then keep
+asking it where you are and what's next.
 
 You can talk to it from four places, and they all reach the same agent and the
 same memory:
 
 - the **Chat** tab (Cmd+1),
 - **Omni Chat**, the overlay you summon from anywhere with Control+Shift+Space
-  (see [Quick chat](quick-chat.md)),
+  (see [Chat and Omni Chat](quick-chat.md)),
 - your voice (see [Voice](voice.md)),
 - Telegram (see [Telegram](telegram.md)).
 
@@ -59,8 +59,9 @@ You can see all of this under **Memory → Projects**, **Tasks**, and
 **Memory → Agent todos**.
 
 For a project with a lot of tickets, ask it to reconcile the project against
-JIRA. It hands that to the `project-manager` specialist, which reads the
-tickets and reports what changed.
+JIRA. It hands that to the `project-manager` specialist (a smaller agent with
+its own tools; see [Specialists](#specialists)), which reads the tickets and
+reports what changed.
 
 ### Starting work
 
@@ -144,14 +145,18 @@ the assistant's.
 
 Every memory has a kind, and the assistant narrows its searches by kind:
 
-- `fact`, `preference`, `project`, `decision`, `agent-feedback`: things you
-  told it, or that it learned.
+- `fact`, `preference`, `project`, `decision`: things you told it, or that it
+  learned.
+- `agent-feedback`: how you want agents to behave. It comes from what you tell
+  the assistant, and from the transcript digest.
 - `note`: quick jot-downs (Memory → Quick note, or "note that…"). These feed
   the daily and weekly recaps.
 - `doc`: documents you ingested from a URL or pasted text.
 - `activity-summary`, `session-summary`, `day-summary`: written only by the
   background jobs, never by a chat turn.
-- `dismissal`: suggestions you turned down.
+
+Suggestions you turn down are kept in a separate list, not as memories, so
+they can be matched exactly.
 
 When a fact changes, the assistant corrects the memory instead of storing a
 contradiction. The old version stays for the record but drops out of search.
@@ -178,13 +183,26 @@ Browse and search it under **Memory → Activity**.
 The assistant sees your work through the activity log, the PR poller and
 memory. It does not watch your terminals.
 
-| It can see right away | It sees after the nightly jobs | It can't see |
-| --- | --- | --- |
-| Your tasks, projects, todos and memories | What happened inside a Claude Code session (the transcript digest, if you turned it on) | Terminal output or a session's live transcript |
-| The activity log, as events happen | Summaries of each 4-hour window and each day | Whether an instruction it sent was carried out |
-| Workspace PR state, checks and mergeability (polled every minute) | | The attention bell (a session waiting on a prompt) |
-| Live GitHub searches: your PRs, review requests | | |
-| Anything a Claude Code session saved to Yarvis memory | | |
+**It sees right away:**
+
+- your tasks, projects, todos and memories,
+- the activity log, as events happen,
+- workspace PR state, checks and mergeability (polled every minute),
+- live GitHub searches: your PRs and review requests,
+- anything a Claude Code session saved to Yarvis memory.
+
+**It sees after the nightly jobs:**
+
+- what happened inside a Claude Code session, if you turned on the
+  transcript digest,
+- summaries of each 4-hour window and each day.
+
+**It can't see:**
+
+- terminal output, or a session's live transcript,
+- whether an instruction it sent was carried out,
+- the attention bell (a session waiting on a prompt),
+- PRs you reviewed on github.com rather than in Yarvis.
 
 Two ways to close the gap during the day:
 
@@ -199,23 +217,29 @@ Two ways to close the gap during the day:
 
 The digest is off by default for a reason. Transcripts often hold pasted
 secrets and other people's data, and summarizing them sends them to your LLM
-provider. Only allow directories you're comfortable with.
+provider. The summaries are then stored as memories, which Claude Code
+sessions (over MCP) and the Telegram bot can read back. Only allow
+directories you're comfortable with.
 
 ## What it asks before doing
 
-Some actions pause and ask you in the approval bar above the composer (press
+Some actions pause and ask you in the approval bar above the message box (press
 **A** to approve, **D** to deny):
 
 - **Booking a calendar event** asks every time.
-- **MCP tools** ask unless you set them to auto-approve in the Tool Manager.
+- **MCP tools** ask unless you set them to auto-approve in the Tool manager.
 - **Spoken turns** ask before anything irreversible: deleting a task, archiving
   a workspace, starting work, filing a JIRA ticket, syncing branches, sending an
   instruction to a session, launching a session, forgetting a memory, or
   delegating. A transcript can be misheard, or picked up from the room.
 
-The assistant also only creates workspaces, starts work, syncs, sends
-instructions or archives when you asked in the current conversation. It never
-copies text from an issue, PR or memory into a session as an instruction.
+The assistant is also instructed to create workspaces, start work, sync,
+send instructions or archive only when you ask in the current conversation,
+and never to copy text from an issue, PR or memory into a session as an
+instruction. These are instructions to the model, not checks in code, so a
+cleverly written issue or PR could still talk it into something. The approval
+prompts above, and the checks on what can be typed into a session (see
+[Workspaces](workspaces.md)), are enforced in code.
 
 A denied call is not retried.
 
@@ -227,20 +251,23 @@ each turn smaller.
 
 Always available:
 
-- **Tasks.** Create, list, update, complete, roll over and find finished tasks.
+- **Tasks.** Create, list, update, complete, delete, roll over and find
+  finished tasks.
 - **Memory.** Remember, recall, correct, list, forget and take notes.
-- **Projects.** Create and update projects, and track tickets with priorities.
+- **Projects.** Create, read and update projects, and track, list and untrack
+  tickets with priorities.
 - **Todos.** The assistant's own todo list.
 - **Activity.** Search the event log and count activity by type.
-- **Planning.** Find dangling work, suggest what's next, dismiss suggestions,
-  and summarize the week.
+- **Planning.** Find dangling work, suggest what's next, dismiss or restore a
+  suggestion, and summarize the week.
 - **Delegation.** List specialists and delegate to one.
 - **Attention.** Raise a notification when it needs you.
 
 Loaded on demand:
 
-- **Workspaces.** List repos and issues, start work, create and start sessions,
-  check status, sync with base, send instructions, archive.
+- **Workspaces.** List repos and issues, start work, create and start sessions
+  (including a scratch session with no repo), check status, sync with base,
+  send instructions, archive.
 - **JIRA.** Search, read, create, and start work on a ticket.
 - **PR review.** List your guided reviews and search the notes you took while
   reviewing.
@@ -331,19 +358,11 @@ act on them.
 
 ## Background jobs
 
-Three jobs ship with the app and keep memory up to date:
-
-- Every **4 hours**, the events nobody has summarized yet become one
-  `activity-summary` memory.
-- At **02:00**, the transcript digest (if on) writes a `session-summary` for
-  each new or grown Claude Code session.
-- At **03:00**, yesterday's summaries are folded into one `day-summary`.
-
-A Mac asleep at 02:00 still runs the job once when it wakes. Events are marked
-processed only after their summary is saved, so a failed run loses nothing.
-Job status and a **Run now** button are under **Settings → Assistant**.
-
-You can also schedule your own prompts. See [Scheduled jobs](scheduled-jobs.md).
+Three jobs ship with the app and keep memory up to date: a summary of recent
+activity every 4 hours, the transcript digest at 02:00 (if on), and a daily
+rollup at 03:00. Their status and a **Run now** button are under **Settings →
+Assistant**. See [Scheduled jobs](scheduled-jobs.md#background-jobs-that-ship-with-the-app)
+for the details, and for scheduling your own prompts.
 
 ## Tips
 

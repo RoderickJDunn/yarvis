@@ -7,16 +7,17 @@ You tell the Yarvis assistant what matters this week. It keeps track of your
 projects, tasks and what you actually did. It starts work in isolated
 workspaces with a Claude Code session on each, and it answers "where did I
 leave off?" and "what should I do next?". Around it sit the tools a working
-day needs: terminals, PR review with guided tours, your calendar with alarms
-you can't miss, voice, a clipboard palette, and MCP in both directions.
+day needs: terminals, PR review with guided tours, your calendar with
+full-screen meeting alarms, voice, a clipboard palette, and MCP (connect
+servers to Yarvis, and let Claude Code use Yarvis's memory).
 
 ## Get started
 
-1. Follow [Getting started](docs/getting-started.md). It covers requirements,
-   PostgreSQL with pgvector on a Mac, the first launch, and the first
-   configuration.
-2. Or let Claude Code walk you through it: clone the repo, run `claude` in it,
-   and type `/yarvis-setup`.
+- Follow [Getting started](docs/getting-started.md). It covers requirements,
+  PostgreSQL with pgvector on a Mac, the first launch, and the first
+  configuration.
+- Or let Claude Code walk you through it (needs Claude Code installed): clone
+  the repo, run `claude` in it, and type `/yarvis-setup`.
 
 The short version, for those who have Bun, Rust and Postgres already:
 
@@ -35,7 +36,7 @@ Then, in the app, open **Settings → Credentials**. Save the database URL
 | Feature | What it does |
 | --- | --- |
 | [The assistant](docs/features/assistant.md) | Plans your week with you, remembers what matters, tracks projects and priorities, starts and steers work |
-| [Chat and quick chat](docs/features/quick-chat.md) | The Chat tab, and Omni Chat: summon the assistant over any screen with Control+Shift+Space |
+| [Chat and Omni Chat](docs/features/quick-chat.md) | The Chat tab, and Omni Chat: summon the assistant over any screen with Control+Shift+Space |
 | [Workspaces](docs/features/workspaces.md) | Multi-repo git worktrees, each with its own Claude Code session, diffs, self-review and stacked PRs |
 | [Terminals](docs/features/terminals.md) | Tabbed, split terminals that keep running while you switch views |
 | [PR review](docs/features/pr-review.md) | GitHub and Azure DevOps reviews with guided tours and per-line questions |

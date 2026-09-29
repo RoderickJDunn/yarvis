@@ -7,7 +7,7 @@ Yarvis can listen to you and speak its answers. It needs two things for that:
 
 Both can run on your own Mac, with no API key and nothing sent to the cloud.
 This guide sets up [mlx-audio](https://github.com/Blaizzy/mlx-audio), which
-serves both halves on one port through an OpenAI-shaped `/v1/audio` API.
+serves both on one port through an OpenAI-compatible `/v1/audio` API.
 
 Voice is optional. Skip this whole page if you don't want it. For how to use
 voice once it works, see [Voice](features/voice.md).
@@ -37,20 +37,22 @@ uv run mlx_audio.server --host 127.0.0.1 --port 8000
 starts the server in the foreground. Leave it running in its own terminal.
 
 Keep `--host 127.0.0.1`. That binds the server to your machine only, so
-nothing else on your network can reach it.
+nothing else on your network can reach it. The server has no authentication,
+so any program on your Mac can still use it. Only leave it running if you're
+fine with that.
 
 ## 2. Point Yarvis at it
 
 In the Yarvis app:
 
-1. Open **Settings → LLM Providers** and press **Add**. Fill in:
+1. Open **Settings → LLM Providers** and press **Add provider**. Fill in:
    - **Name:** `local speech` (any name works)
    - **Base URL:** `http://127.0.0.1:8000/v1`
-   - **API kind:** `openai`
-   - **Models:** type any one name, for example `speech`. The form needs at
-     least one entry to save. Speech models are picked separately in the next
-     step.
-2. Open **Settings → Voice** and set both halves to the `local speech` provider:
+   - **API protocol:** either OpenAI option. Speech uses the OpenAI audio API
+     whichever you pick.
+   - Leave **Models** empty. Speech models are picked in the next step.
+2. Open **Settings → Voice** and set both **Speech to text** and **Text to
+   speech** to the `local speech` provider:
    - **Speech to text** model: `mlx-community/whisper-large-v3-turbo-asr-fp16`
    - **Text to speech** model: `mlx-community/Soprano-1.1-80M-bf16`
 3. Press **Test voice**. You should hear a sentence. The first call downloads
@@ -70,9 +72,9 @@ Yarvis does not start the speech server for you yet
 - **Run it as a login item** with `launchd`, so it is always up.
 
 For the `launchd` option, save the file below as
-`~/Library/LaunchAgents/com.yarvis.speech.plist`. Change the two paths to match
-your machine: `which uv` prints the first, and the second is your clone of the
-repo.
+`~/Library/LaunchAgents/com.yarvis.speech.plist`. Change `/opt/homebrew/bin/uv`
+to the output of `which uv`, `/Users/you/dev/yarvis` to your clone of the repo,
+and `/Users/you` in the log paths to your home folder.
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -98,9 +100,9 @@ repo.
   <key>KeepAlive</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>/tmp/yarvis-speech.log</string>
+  <string>/Users/you/Library/Logs/yarvis-speech.log</string>
   <key>StandardErrorPath</key>
-  <string>/tmp/yarvis-speech.log</string>
+  <string>/Users/you/Library/Logs/yarvis-speech.log</string>
 </dict>
 </plist>
 ```
@@ -108,11 +110,16 @@ repo.
 Then load it:
 
 ```bash
-launchctl load ~/Library/LaunchAgents/com.yarvis.speech.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.yarvis.speech.plist
 ```
 
-To stop it for good, run `launchctl unload` on the same path. The server's
-output goes to `/tmp/yarvis-speech.log`.
+To stop it for good:
+
+```bash
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.yarvis.speech.plist
+```
+
+The server's output goes to `~/Library/Logs/yarvis-speech.log`.
 
 ## Choosing other models
 
@@ -126,6 +133,11 @@ These are verified on Apple Silicon through the server above:
 | Speech to text | `mlx-community/whisper-large-v3-turbo-asr-fp16` | Served by the same server. |
 | Speech to text | `gemma4:latest` through Ollama | If you already run Ollama, add it as a provider at `http://localhost:11434/v1`. |
 
+Model names are free text, because a local server names its own models. They
+take the form `namespace/name` with an optional `:tag` (`whisper:latest`).
+That shape keeps a model name from pointing anywhere except the model
+endpoint.
+
 Which models a provider offers is set in **Settings → LLM Providers → Models**.
 Each model carries tags (`chat`, `stt`, `tts`, `vision`, `embed`) that decide
 where it shows up. Only a `tts` model can speak, and only a `chat` model can
@@ -133,9 +145,17 @@ answer a message.
 
 ### Cloud options
 
-- **Gemini** can do both halves with the same API key you use for chat. Pick a
+- **Gemini** can do both speech to text and text to speech with the same API
+  key you use for chat. Pick a
   Gemini chat model for speech to text and a `-tts` model for text to speech.
-  Gemini needs a **Voice** name such as `Kore`, `Puck` or `Zephyr`.
+  **Voice** takes one of Gemini's voice names, such as `Kore`, `Puck` or
+  `Zephyr`. Blank uses `Kore`.
+
+  Gemini has no audio endpoint. Yarvis asks `generateContent` for audio output
+  to speak, and attaches the recording to an ordinary request to transcribe.
+  That's why Gemini's chat models appear under speech to text. On Gemini,
+  **Extra request fields** become generation-config fields rather than
+  top-level ones.
 - **Hugging Face** works for speech to text only
   (`openai/whisper-large-v3-turbo`), with a token entered in Settings.
 
@@ -146,17 +166,20 @@ MOSS-TTS-Nano speaks in the voice of a short reference recording.
 1. Record five to ten seconds of normal speech. It needs no script.
 2. Save it as a mono WAV at **16, 24 or 48 kHz**. Do not use 44.1 kHz (see
    below).
-3. In **Settings → Voice**, open the advanced section. Leave **Reference clip**
-   empty and put the file's path in **Extra request fields**:
+3. In **Settings → Voice**, open **Voice cloning & server-specific fields**.
+   Leave **Reference clip** empty and put the file's path in **Extra request
+   fields**:
    ```json
    {"ref_audio": "/Users/you/voice-samples/reference.wav"}
    ```
 
+Neither field can change the model or the text being spoken.
+
 mlx-audio wants a path on disk. The **Reference clip** field sends the audio as
 base64 instead, which is what vLLM-Omni on an NVIDIA machine expects.
 
-**Why not 44.1 kHz:** a 44.1 kHz clip doesn't error. The server returns a
-minute of rambling for a short sentence. 44.1 kHz is the default for Voice Memos
+**Why not 44.1 kHz:** a 44.1 kHz clip doesn't cause an error. Instead, the
+server returns about a minute of rambling audio for a short sentence. 44.1 kHz is the default for Voice Memos
 and QuickTime, so check your file. To make a test clip at a safe rate:
 
 ```bash
@@ -179,11 +202,14 @@ shows the backend's own error message.
   Installing espeak-ng with Homebrew does not help. Either use Soprano, or link
   the data where Kokoro looks:
   ```bash
-  cd .venv/lib/python3.12/site-packages/espeakng_loader && ln -sf espeak-ng-data/* .
+  cd .venv/lib/python3.*/site-packages/espeakng_loader && ln -sf espeak-ng-data/* .
   ```
 - **"ffmpeg not found".** Only mp3 output needs ffmpeg. Yarvis asks for WAV, so
   you only see this if you set `response_format` yourself in Extra request
   fields.
+- **"Failed to load image or audio file" (Ollama).** A format problem. Yarvis
+  converts every recording to 16 kHz mono WAV before sending it, so this
+  usually means a hand-built request rather than the app.
 - **"Model not supported by provider hf-inference".** Hugging Face doesn't serve
   that text-to-speech model. Use the local server.
 - **A cloned voice rambles for a minute.** The reference clip is probably
@@ -196,7 +222,7 @@ shows the backend's own error message.
 ## Running MOSS through vLLM instead (untested)
 
 On Linux with an NVIDIA GPU, vLLM-Omni serves MOSS-TTS-Nano over the same
-OpenAI-shaped API:
+OpenAI-compatible API:
 
 ```bash
 vllm serve OpenMOSS-Team/MOSS-TTS-Nano --omni --port 8091

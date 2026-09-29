@@ -1,15 +1,15 @@
-# Chat and quick chat
+# Chat and Omni Chat
 
 There are two ways to type to [the assistant](assistant.md):
 
 - the **Chat** tab, a full-page chat with a session list,
-- **Omni Chat**, a quick-chat overlay you can summon over any screen. It sees
+- **Omni Chat**, a chat overlay you can summon over any screen. It sees
   what you're looking at.
 
 Both use the same agent, the same tools and the same memory. They also share
 the provider and model you last picked.
 
-## Omni Chat (quick chat)
+## Omni Chat
 
 Press **Control+Shift+Space** from anywhere, even when Yarvis is in the
 background. The window comes forward and a chat panel opens in the middle of it.
@@ -62,13 +62,13 @@ row to see the arguments and the result. When the reply starts, the list folds
 into one line, for example "Used 4 tool calls". Reasoning, when the provider
 returns it, shows as a "Thinking…" block you can expand.
 
-Messages you spoke are labelled `spoken`. Messages relayed from Telegram are
-labelled with the Telegram user.
+Messages you spoke are labeled `spoken`. Messages relayed from Telegram are
+labeled with the Telegram user.
 
 ### Approving tool calls
 
-When a tool call needs your OK, an amber **Approve?** bar appears above the
-composer. It shows one call at a time, with a count of how many are waiting.
+When a tool call needs your approval, an amber **Approve?** bar appears above
+the message box. It shows one call at a time, with a count of how many are waiting.
 
 - **A** approves, and **D** denies. The keys are ignored while you're typing,
   and for a moment after a new call appears, so a keystroke meant for something
@@ -84,12 +84,12 @@ which calls ask.
 
 A chat that grows past the model's context window is **compacted**, not cut
 off. Yarvis summarizes the older messages and keeps the last few word for word.
-The chat on screen doesn't change. The threshold is **Compact at** under
-**Settings → Assistant → Turn budget** (default 200,000 tokens). Models can
-carry their own threshold in the model catalog.
+The chat on screen doesn't change. The threshold is **Summarize the chat
+past (tokens)** under **Settings → Assistant → Turn budget** (default 200,000). Some models
+come with a lower threshold of their own, which takes precedence.
 
-The same section sets **Max steps** per turn (default 100) and an optional cap
-on output tokens. A turn that runs out of steps ends with no reply, so the
+The same section sets **Tool-calling steps per turn** (default 100) and
+**Cap the reply length** (off by default). A turn that runs out of steps ends with no reply, so the
 default is set high.
 
 ### Voice
@@ -98,8 +98,8 @@ Both chat surfaces have a microphone button. See [Voice](voice.md).
 
 ## Recaps and notes
 
-Two related shortcuts live on **Memory → Memories**:
+Two related buttons live on **Memory → Memories**:
 
-- **Recap: Today / This week** writes a short summary of your notes and
-  activity, using the chat's current model.
+- **Recap: Today / This week** writes a short summary of the tasks you
+  completed and the notes you took, using the chat's current model.
 - **Quick note** saves a `note` memory. Notes feed the recaps.

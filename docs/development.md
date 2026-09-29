@@ -21,7 +21,7 @@ Three processes, each with a clear owner:
   Drizzle), every LLM call, memory, the background jobs and the Telegram bot.
   In development it runs `sidecar/src/server.ts` directly with Bun.
 
-Data lives in PostgreSQL with pgvector. Structural settings live in
+Data lives in PostgreSQL with pgvector. Non-secret settings live in
 `~/.yarvis/settings.json`. See [Configuration](configuration.md).
 
 ## Commands
@@ -31,7 +31,7 @@ Run these from the repo root.
 ```bash
 bun run tauri dev                 # the full app: frontend + Rust core + sidecar
 bun run dev:instance <name>       # a second copy beside your main one
-bun run sidecar:dev               # the sidecar on its own (prints a dev token)
+bun run sidecar:dev               # the sidecar on its own (YARVIS_LOG_DEV_TOKEN=1 prints its API token)
 
 bun run test                      # frontend tests (src/) and dev-script tests (scripts/)
 bun run sidecar:test              # sidecar tests; needs a test database
@@ -104,8 +104,11 @@ bun run dev:instance migration-test
 ```
 
 The name picks a bundle identifier (`com.mikebennett.yarvis.migration-test`)
-and a pair of Vite ports, the same pair every time, in the 1430–1489 range.
-`YARVIS_DEV_PORT` pins a port instead, and fails if it is taken. Because macOS
+and a pair of Vite ports in the 1430–1489 range. The pair comes from the name,
+so it's the same every launch. If something else holds it, the launcher moves
+to the next free pair. The second port is Vite's HMR socket, used when
+`TAURI_DEV_HOST` is set. `YARVIS_DEV_PORT` pins a port instead, and fails if it
+is taken. Because macOS
 derives the app data directory from the identifier, each instance gets its own
 `alarms.json` and control socket. The window title shows the name.
 
@@ -159,7 +162,8 @@ main instance to make it stop. Only `1`/`true` and `0`/`false` are read.
 
 A separate database covers only the rows. The Telegram token still comes from
 the shared Keychain, so turning workers on in a second instance splits your real
-bot traffic between two processes. Give it its own bot token first.
+bot traffic between two processes. Give it its own bot token first. The
+workspace poller also doubles GitHub API traffic against your rate limit.
 
 Workspaces are shared too: both instances create worktrees under
 `YARVIS_WORKSPACES_ROOT`. Point one elsewhere to keep them apart.
@@ -201,9 +205,7 @@ changes.
 src/            React frontend (Vite + TS + Tailwind)
   lib/          sidecar API client, Keychain wrappers, Omni Chat context registry,
                 notifications, cross-tab nav (nav.ts), unsaved editor buffers
-                (fileDrafts.ts), and the voice loop (useVoice.ts, voice.ts,
-                voiceConfig.ts, useVoiceRecorder.ts, speechChunks.ts,
-                speechQueue.ts, audioEncoding.ts, audioPlayback.ts)
+                (fileDrafts.ts), and the voice loop (useVoice.ts and friends)
     pr/         provider-agnostic PR data layer: GitHub and Azure transports, cache,
                 refs, per-file viewed state, link parsing, diff parsing and context
                 expansion, guide, insight and stack clients
@@ -241,9 +243,9 @@ sidecar/        Bun + TS service (Hono)
   src/core/        client for the Rust core's control socket
   src/db/          Drizzle schema, client, migrations (applied on startup)
   src/chat/        streaming multi-provider chat and tools (agent.ts: the shared turn)
-  src/llm/         provider resolution and the model catalogue (catalog.ts)
+  src/llm/         provider resolution and the model catalog (catalog.ts)
   src/voice/       speech to text and text to speech
-  src/clipboard/   saved clipboard entries and the credential screen
+  src/clipboard/   saved clipboard entries and the credential screen (screening.ts)
   src/telegram/    Telegram bot
   src/tasks/       daily and weekly tasks, dedupe, "did I already finish this?"
   src/events/      the local activity log

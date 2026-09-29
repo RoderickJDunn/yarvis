@@ -15,11 +15,14 @@ The bot needs a configured database and at least one LLM provider. See
 2. Paste it into **Settings → Telegram** and save. It is stored in the
    Keychain, and saving reloads the sidecar to pick it up.
 3. Message your bot `/whoami`. It replies with your chat id. Until at least one
-   id is on the allowlist, the bot answers **only** `/whoami`.
+   id is on the allowlist, the bot does nothing else: any other message gets a
+   reply saying it isn't paired yet, with your chat id.
 4. Paste your chat id into **Allowed chat ids** and save. Separate several ids
    with commas.
 
-Once the allowlist is set, the bot ignores any chat that isn't on it.
+Once the allowlist is set, the bot ignores any chat that isn't on it. The one
+exception is `/whoami`, which it answers for anyone. That only reveals the
+sender's own chat id, but it does show the bot is running.
 
 ## Use it
 
@@ -77,8 +80,9 @@ How it behaves:
 - Your `/unlock` message is deleted so the code doesn't linger in the chat.
 - The app raises a desktop notification on each unlock, failed attempt and
   lockout, so you see access you didn't start.
-- The code is checked in the sidecar. It never leaves your authenticator and
-  laptop.
+- The code is checked in the sidecar. The TOTP secret stays on your laptop and
+  in your authenticator. Only the six-digit code passes through Telegram, and
+  the bot deletes that message.
 
 ## Running more than one copy of the app
 

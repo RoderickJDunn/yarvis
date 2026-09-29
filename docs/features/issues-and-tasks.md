@@ -84,7 +84,8 @@ A toggle at the top switches between **GitHub** and **JIRA**.
 | **Filters** | Your saved searches, written in GitHub search syntax, for example `is:open is:issue label:bug` |
 
 Star an issue to keep it close at hand. Starred issues also feed the
-in-progress list (see **Settings → Work in progress**).
+**In progress** list in the attention panel (the bell in the top bar). Choose
+what feeds that list under **Settings → Work in progress**.
 
 ### JIRA
 

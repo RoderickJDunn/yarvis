@@ -14,21 +14,25 @@ There is nothing to set up.
 
 You'll find copy buttons next to:
 
-- **In a workspace:** the workspace folder; each repo's worktree path (and the
-  picked one, when the column shows another worktree); the PR link on the
-  status line and in the PR checks view; that view's check summary; and both
-  file lists, either one row's full path or the whole list, one path per line.
-- **In a PR review:** the provider's link to the PR; the link to each file,
-  pinned to the commit the PR points at so it still shows the code you meant
-  after a later push; the link to each check; and every check at once, one per
-  line.
+- **In a workspace:**
+  - the workspace folder,
+  - each repo's worktree path, and the picked one when the column shows
+    another worktree,
+  - the PR link, on the status line and in the PR checks view,
+  - the PR checks view's check summary,
+  - both file lists: one row's full path, or the whole list, one path per line.
+- **In a PR review:**
+  - the provider's link to the PR,
+  - the link to each file, pinned to the commit the PR points at, so it still
+    shows the code you meant after a later push,
+  - the link to each check, and every check at once, one per line.
 - **On an issue:** its GitHub or JIRA link.
 
 Where a link can't be worked out, no button appears.
 
 ### The clipboard palette
 
-1. Press **Control + Shift + V** from anywhere, or click the clipboard icon in
+1. Press **Control+Shift+V** from anywhere, or click the clipboard icon in
    the nav rail.
 2. Type to search.
 3. Move with the arrow keys, and press **Enter** to copy the highlighted row
@@ -36,8 +40,8 @@ Where a link can't be worked out, no button appears.
 
 The palette has two tabs:
 
-- **Saved.** The things you copy again and again: an identity id, a CLI
-  command, a link. Entries can be labelled, tagged and pinned. Pinned entries
+- **Saved.** The things you copy again and again: a user id, a CLI
+  command, a link. Entries can be labeled, tagged and pinned. Pinned entries
   sort first, then whatever you copied most recently, so an empty search
   already offers what you usually want.
 - **History.** What passed through your clipboard during this run of the app.

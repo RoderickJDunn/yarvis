@@ -4,7 +4,9 @@ The **Terminal** tab (Cmd+3) is a full terminal inside Yarvis, with tabs and
 split panes. It uses the same terminal as each workspace's tabs. Shells run in
 the Rust core, not in the window, so they keep running when you switch to
 another part of the app. A Claude Code run started in one of these terminals
-can use Yarvis memory and can flag you in the attention bell.
+can use Yarvis memory and can flag you in the attention bell (the bell in the
+top bar that lists sessions waiting on you; see
+[Workspaces](workspaces.md#the-attention-bell)).
 
 ## Use it
 

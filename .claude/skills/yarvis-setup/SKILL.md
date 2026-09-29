@@ -1,12 +1,12 @@
 ---
 name: yarvis-setup
 description: >-
-  Walk a new developer through setting up a Yarvis dev build on their Mac:
-  check prerequisites, install PostgreSQL 17 with pgvector, create the
-  database, install dependencies, launch the app, and guide the first
-  configuration in the Settings screen. Can also set up the optional local
-  speech server for voice. Use when someone asks to set up, install, or get
-  started with Yarvis, or runs /yarvis-setup.
+  Walk a new developer through setting up a dev build of the Yarvis desktop
+  app on their Mac: check prerequisites, install PostgreSQL 17 with pgvector,
+  create the database, install dependencies, launch the app, and guide the
+  first configuration in its Settings screen. Can also set up Yarvis's
+  optional local speech server. Use only when someone asks to set up, install,
+  or get started with Yarvis itself, or runs /yarvis-setup.
 ---
 
 # Set up Yarvis
@@ -18,9 +18,11 @@ they want voice. This skill adds how to run the steps *with* the person.
 
 ## Rules
 
-- **Ask before you install or start anything.** Show the exact command and say
-  what it changes (for example, "installs Postgres 17 with Homebrew and starts it
-  as a login service"). Batch related commands into one question.
+- **Ask before you install, start, or change anything outside the repo.** That
+  includes Homebrew installs, background services, and lines added to
+  `~/.zshrc`. Show the exact command and say what it changes (for example,
+  "installs Postgres 17 with Homebrew and starts it as a login service"). Batch
+  related commands into one question.
 - **Never ask for, read, or handle secrets.** API keys, tokens and the database
   password go into the app's **Settings → Credentials** screen, which stores
   them in the Keychain. Tell the person what to paste there. If they paste a key
@@ -31,7 +33,12 @@ they want voice. This skill adds how to run the steps *with* the person.
 - **Never overwrite `~/.yarvis/settings.json`.** Copy
   `docs/settings.example.json` there only if no file exists, and only if they
   want a file to edit.
-- **Run commands from the repo root.** It's two directories above this file.
+- **Don't read the app's logs yourself.** A startup error can include the
+  database URL. Ask the person for the error text on screen instead, and never
+  repeat a connection string back.
+- **Run commands from the repo root**, the directory that contains `.claude/`.
+  If there is no `package.json` there, you are in a Yarvis workspace rather
+  than a clone of the repo. Stop and tell the person.
 - **Go one step at a time.** After each step, run its check and show the result
   before moving on. If a check fails, fix that before going further.
 - Keep your messages short and concrete: what you're about to do, the command,
@@ -50,9 +57,10 @@ It prints one line per requirement: `OK`, `MISSING` (required) or `WARN`
 what's missing, and the order you'll fix things in. Skip every step that's
 already `OK`.
 
-If the Postgres lines fail with "no response" but the person says Postgres is
-running, your shell's sandbox is probably blocking the local socket. Re-run the
-script outside the sandbox, or ask them to run it with `! .claude/skills/yarvis-setup/check.sh`.
+If `postgres-server` shows `MISSING` but the person says Postgres is running,
+your shell's sandbox is probably blocking the local socket. Ask them to run the
+script themselves by typing `! .claude/skills/yarvis-setup/check.sh`, which
+puts its output in the conversation.
 
 ## 2. Ask what they want
 
@@ -76,9 +84,9 @@ Follow "1. Install the build tools" in `docs/getting-started.md`.
 
 - If `xcode-clt` is missing, `xcode-select --install` opens a macOS dialog. Ask
   the person to click through it and tell you when it finishes.
-- Prefer mise, since the repo pins Bun and Rust in `mise.toml`. If mise is
+- Prefer mise, since the repo lists Bun and Rust in `mise.toml`. If mise is
   installed but `bun` or `cargo` is missing, run `mise install` in the repo.
-- If you add a line to `~/.zshrc`, say so. Tell them to open a new terminal
+- Ask before adding a line to `~/.zshrc`. Tell them to open a new terminal
   (or run `exec zsh`) for it to apply to their own shell. In your shell, use
   `mise exec -- <command>` or the full path until then.
 
@@ -88,7 +96,8 @@ Follow "2. Install PostgreSQL with pgvector" in `docs/getting-started.md`:
 
 1. `brew install postgresql@17 pgvector`
 2. `brew services start postgresql@17`
-3. Put `/opt/homebrew/opt/postgresql@17/bin` on `PATH` (it's keg-only).
+3. Put `$(brew --prefix postgresql@17)/bin` on `PATH` (it's keg-only). Ask
+   before adding it to `~/.zshrc`.
 4. `createdb yarvis`
 5. `psql -d yarvis -c 'CREATE EXTENSION IF NOT EXISTS vector;'`
 
@@ -104,7 +113,10 @@ psql -d postgres -Atc "select count(*) from pg_available_extensions where name =
 Docker, the `pgvector/pgvector:pg17` image has it built in.
 
 Work out their database URL and tell them it. With Homebrew defaults it is
-`postgres://localhost:5432/yarvis`. With a password, it is
+`postgres://localhost:5432/yarvis`. Mention that Homebrew's Postgres trusts
+every local connection, so anything running on the Mac can read the database.
+It isn't reachable from the network. `docs/getting-started.md` says how to add
+a password if they want one. With a password, it is
 `postgres://USER:PASSWORD@localhost:5432/yarvis`, and they type the password
 into the app, not into this chat.
 
@@ -131,8 +143,9 @@ this session and they can see its log:
 cd <repo path> && bun run tauri dev
 ```
 
-If they'd rather you run it, start it in the background and watch its output
-for errors. A window titled Yarvis appears when the build is done.
+If they'd rather you run it, start it in the background. Don't read its log
+output. Ask them to tell you when the Yarvis window appears, or what error it
+shows.
 
 Tell them to expect a Keychain prompt, and to choose **Always Allow**.
 
@@ -147,7 +160,7 @@ item at a time, and wait for them to say they've done each:
      confirms the app reached the database.
    - If it shows "Couldn't start the local service", ask them for the error on
      screen and use the troubleshooting section of the getting-started doc.
-2. **An LLM provider key** in the same list: Anthropic, Gemini or Cerebras. Or
+2. **An LLM provider key**, on the same Credentials tab: Anthropic, Gemini or Cerebras. Or
    AWS credentials for Bedrock, or a custom provider under **Settings → LLM
    Providers**. Ask which they have. Don't ask for the key itself.
 3. **Check it works**: the **Dashboard** shows Database reachable and the
@@ -168,7 +181,14 @@ steps, and give them the Settings path for each:
 | Google Calendar | `docs/features/calendar-and-alarms.md` | Create the OAuth client in Google Cloud, enter the id and secret, then connect from the Calendar tab |
 | 1Password | `docs/configuration.md#1password-instead-of-the-keychain` | Settings → Credentials → Secret store |
 | Memory search | `docs/configuration.md#embeddings` | A Gemini key, or Settings → Embeddings |
-| Session digests | `docs/features/assistant.md#what-it-can-see` | Settings → Assistant: turn on the transcript digest and pick directories |
+| Transcript digest | `docs/features/assistant.md#what-it-can-see` | Settings → Assistant: turn on the transcript digest and pick directories |
+
+Before they turn on the transcript digest, tell them what it does with their
+data. Claude Code transcripts often hold pasted secrets and other people's
+data. The digest sends them to the LLM provider, and the summaries are stored
+as memories that Claude Code sessions (over MCP) and the Telegram bot can read
+back. Suggest allowing only specific project directories they're comfortable
+with.
 
 For Google Calendar, walk them through the Google Cloud Console steps one
 screen at a time. It's the step people most often get stuck on.

@@ -9,14 +9,10 @@ those notes later.
 
 ## Set up
 
-1. Save a token in **Settings → Credentials**:
-   - **GitHub token.** A classic PAT needs `repo`. A fine-grained PAT needs
-     **Contents: Read** plus pull request and issue access.
-   - **Azure DevOps token.** A PAT with **Code (read)** and **Pull Request
-     Threads (read & write)**. Also set the organization URL
-     (`https://dev.azure.com/your-org`) on the same screen.
-
-   See [Token scopes](../configuration.md#token-scopes) for the details.
+1. Save a **GitHub token** or an **Azure DevOps token** in **Settings →
+   Credentials**. For Azure DevOps, also set the organization URL
+   (`https://dev.azure.com/your-org`) on the same screen. See
+   [Token scopes](../configuration.md#token-scopes) for what each token needs.
 2. Guided reviews and line questions are agent runs, so they also need an LLM
    provider key. See [Getting started](../getting-started.md#5-first-configuration).
 3. To start a workspace from a PR, register its repo under **Settings →
@@ -73,9 +69,8 @@ as two. If the branch lookup fails or is slow, the list loads without nesting.
   in the diff header, and appear in the file list when you hover a row. See
   [Clipboard](clipboard.md).
 - Clicking a row in the file list opens that diff, even one marked viewed or
-  folded away. It jumps to the file and flashes its header. The landing holds
-  still for a moment while files above it finish opening, and lets go as soon
-  as you scroll.
+  folded away. It jumps to the file and flashes its header. The view stays on
+  that file while the files above it load, until you scroll.
 - A file with review comments shows a speech bubble with the count. That count
   includes replies and resolved threads.
 
@@ -126,7 +121,7 @@ guide nobody has touched for 30 days is deleted.
 
 1. Hover a line in the diff and press the **?** beside it.
 2. To ask about a range, shift-click a second line. The range runs from the
-   last line you asked about.
+   line you picked in step 1 to the one you shift-click.
 3. Type your question. The answer appears inline, under those lines.
 4. To share an answer with the author, press **Post**. That turns it into a
    real line comment on the PR.
@@ -169,15 +164,15 @@ runs against their code, and the agent session runs in that worktree.
 Some rules that follow from how it works:
 
 - The clone comes from the repo *you* registered under Settings →
-  Repositories, so the branch has to live in that repo. A PR from a fork is
-  refused. That means its author needed push access to raise it.
+  Repositories, so the branch has to live in that repo. PRs from forks are
+  refused, so this works only for PRs whose branch is in that repo.
 - Provisioning runs in the sidecar, so it finishes whether or not you stay on
   the screen. The workspace shows its log while it runs.
-- Pressing Start twice reuses the first workspace instead of cutting a second
-  worktree on the branch.
-- The control turns into the backlink as soon as the start returns. For a
-  workspace made some other way, it turns into the backlink when the PR poll
-  next picks it up.
+- Pressing **Start workspace** twice reuses the first workspace instead of
+  creating a second worktree on the branch.
+- Once the workspace is created, the button changes to a link back to it. For
+  a workspace created some other way, the link appears after the next PR poll
+  (within a minute).
 
 ### See where a PR sits in its stack
 
