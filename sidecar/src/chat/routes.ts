@@ -19,7 +19,7 @@ import {
   MIN_COMPACT_AT_TOKENS,
   saveChatConfig,
 } from "./config.ts";
-import { createSession, getMessages, listSessions } from "./service.ts";
+import { createSession, getMessages, listSessions, rewindToMessage } from "./service.ts";
 
 // Re-exported from the shared agent module so the existing context test (which
 // imports it from here) keeps passing and callers have one import surface.
@@ -45,6 +45,12 @@ const chatSchema = z.object({
    * so it is the user's choice per surface rather than something always on.
    */
   reasoning: z.boolean().optional(),
+  /**
+   * Id of a user message to restart the conversation from: it and everything
+   * after it are dropped before `message` runs as the new turn. `message` may
+   * differ from the original, which is how an edit is sent.
+   */
+  rewindTo: z.string().uuid().optional(),
 });
 
 const createSessionSchema = z.object({ title: z.string().nullish() });
@@ -121,7 +127,8 @@ export function createChatRoutes(config: Config): Hono {
     const body = await c.req.json().catch(() => null);
     const parsed = chatSchema.safeParse(body);
     if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
-    const { sessionId, message, provider, model, context, source, reasoning } = parsed.data;
+    const { sessionId, message, provider, model, context, source, reasoning, rewindTo } =
+      parsed.data;
 
     const dbh = db();
     let chatModel;
@@ -130,6 +137,10 @@ export function createChatRoutes(config: Config): Hono {
     } catch (e) {
       console.error("[chat] model resolution failed:", describeError(e));
       return c.json({ error: clientError(e), detail: errorDetail(e) }, 400);
+    }
+    // After the model resolves, so a request that can't run leaves the history alone.
+    if (rewindTo && !(await rewindToMessage(dbh, sessionId, rewindTo))) {
+      return c.json({ error: "rewindTo is not a user message in this session" }, 404);
     }
     const servers = await listMcpServers();
     const serverNames = new Map(servers.map((s) => [s.id, s.name]));
