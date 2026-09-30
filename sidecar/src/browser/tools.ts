@@ -50,6 +50,8 @@ const stateSchema = z.object({
   url: z.string(),
   title: z.string(),
   navigated: z.boolean().optional(),
+  changed: z.boolean().optional(),
+  note: z.string().max(500).optional(),
   atTop: z.boolean().optional(),
   atBottom: z.boolean().optional(),
 });
@@ -219,7 +221,7 @@ export function buildBrowserTools(bridge: BrowserBridge = browserBridge) {
     }),
     click_browser_element: tool({
       description:
-        "Click a link, tab or sidebar item on a page in the user's Chrome, by ref from list_browser_elements — for example to open another Slack channel. It only works inside the site the tab is already on: a link to another site is refused, and so is anything that sends, posts, deletes or changes something. It cannot type. Returns the tab's URL and title afterwards; then read_browser_page to see the result.",
+        "Click a link, tab or sidebar item on a page in the user's Chrome, by ref from list_browser_elements — for example to open another Slack channel. It only works inside the site the tab is already on: a link to another site is refused, and so is anything that sends, posts, deletes or changes something. It cannot type. Returns the tab's URL and title afterwards, and changed: false when neither moved — then the click may not have worked, so read_browser_page before saying it did.",
       inputSchema: z.object({
         profile: profileField,
         tabId: tabIdField,

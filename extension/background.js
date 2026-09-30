@@ -233,7 +233,18 @@ async function click(tabId, ref) {
   if (opened.length > 0) throw new Error("That click tried to open another tab, which was closed.");
   if (result?.error) throw new Error(result.error);
   if (injectionError && before.url === after.url) throw injectionError;
-  return { ...(await pageState(target)), navigated: before.url !== after.url };
+  const changed = before.url !== after.url || before.title !== after.title;
+  return {
+    ...(await pageState(target)),
+    navigated: before.url !== after.url,
+    changed,
+    // A click that moves nothing is easy to mistake for one that worked.
+    ...(changed
+      ? {}
+      : {
+          note: "The click was delivered, but the page's address and title did not change. It may have opened something in place (a menu, a thread), or done nothing. Read the page before saying what happened.",
+        }),
+  };
 }
 
 async function navigate(tabId, url) {
@@ -394,10 +405,30 @@ function clickElement(ref, blockedSource, blockedPathSource) {
   if (!el || !el.isConnected) {
     return { error: "That element is gone. List the page's elements again." };
   }
-  const label = (el.getAttribute("aria-label") || el.innerText || el.title || "")
-    .replace(/\s+/g, " ")
-    .trim();
-  const anchor = el.closest("a[href]");
+  const labelOf = (node) =>
+    (node.getAttribute("aria-label") || node.innerText || node.title || "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  // Click where a person would: the element under the middle of it. Apps like
+  // Slack put the handler on something inside a sidebar row, and an event sent
+  // to the row itself only bubbles up, never down to it. If something else is
+  // covering that point, the listed element takes the click instead.
+  el.scrollIntoView({ block: "center" });
+  const rect = el.getBoundingClientRect();
+  const x = rect.left + rect.width / 2;
+  const y = rect.top + rect.height / 2;
+  const hit = document.elementFromPoint(x, y);
+  const target = hit && el.contains(hit) ? hit : el;
+
+  // The checks below are on what is really clicked, which can be a control
+  // nested in the row (a "leave channel" button) rather than the row itself.
+  const control =
+    target.closest(
+      'a,button,summary,[role="button"],[role="link"],[role="tab"],[role="treeitem"],[role="menuitem"],[role="option"]',
+    ) ?? el;
+  const label = `${labelOf(el)} ${control === el ? "" : labelOf(control)}`.trim();
+  const anchor = target.closest("a[href]");
   const rawHref = anchor?.getAttribute("href");
   const navigates =
     Boolean(rawHref) &&
@@ -432,8 +463,30 @@ function clickElement(ref, blockedSource, blockedPathSource) {
       return { error: "That link opens a new tab. Yarvis works in the current tab only." };
     }
   }
-  el.scrollIntoView({ block: "center" });
-  el.click();
+  // The whole sequence a real click produces; some apps act on pointerdown or
+  // mousedown and never look at the click.
+  const at = {
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    clientX: x,
+    clientY: y,
+    button: 0,
+    view: window,
+  };
+  for (const type of ["pointerover", "pointerenter", "mouseover", "pointerdown", "mousedown"]) {
+    const Event = type.startsWith("pointer") ? PointerEvent : MouseEvent;
+    target.dispatchEvent(
+      new Event(type, { ...at, pointerId: 1, pointerType: "mouse", isPrimary: true, buttons: 1 }),
+    );
+  }
+  if (typeof target.focus === "function") target.focus({ preventScroll: true });
+  for (const type of ["pointerup", "mouseup", "click"]) {
+    const Event = type.startsWith("pointer") ? PointerEvent : MouseEvent;
+    target.dispatchEvent(
+      new Event(type, { ...at, pointerId: 1, pointerType: "mouse", isPrimary: true }),
+    );
+  }
   return { ok: true };
 }
 
