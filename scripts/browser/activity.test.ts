@@ -33,7 +33,7 @@ describe("describeResult", () => {
 describe("TOOL_FOR_COMMAND", () => {
   it("names the tool behind every command the extension answers", () => {
     expect(Object.keys(TOOL_FOR_COMMAND).sort()).toEqual(
-      ["click", "list_elements", "list_tabs", "navigate", "read_page", "scroll"].sort(),
+      ["click", "inspect", "list_elements", "list_tabs", "navigate", "read_page", "scroll"].sort(),
     );
   });
 });

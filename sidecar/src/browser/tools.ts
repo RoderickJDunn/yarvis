@@ -34,21 +34,50 @@ const tabSchema = z.object({
 const elementsSchema = z.object({
   url: z.string(),
   title: z.string(),
+  /** Set when a site adapter (e.g. "slack") shaped the listing. */
+  adapter: z.string().optional(),
   elements: z.array(
     z.object({
       ref: z.number(),
       kind: z.string(),
       label: z.string(),
       href: z.string().optional(),
+      channelId: z.string().optional(),
+      openUrl: z.string().optional(),
     }),
   ),
   truncated: z.boolean().optional(),
+  /** How many matches were left out because clicking them would be refused. */
+  skipped: z.number().optional(),
+});
+
+const inspectSchema = z.object({
+  url: z.string(),
+  title: z.string(),
+  count: z.number(),
+  matches: z.array(
+    z.object({
+      ref: z.number(),
+      tag: z.string(),
+      attributes: z.record(z.string(), z.string()),
+      text: z.string(),
+      visible: z.boolean(),
+      rect: z.object({ x: z.number(), y: z.number(), width: z.number(), height: z.number() }),
+      clickable: z.boolean(),
+      refused: z.string().optional(),
+      children: z.array(z.string()),
+      childCount: z.number(),
+    }),
+  ),
 });
 
 /** Where the tab ended up after a click, scroll or navigation. */
 const stateSchema = z.object({
   url: z.string(),
   title: z.string(),
+  /** What actually received the click (or hover), which may sit inside the chosen element. */
+  clicked: z.object({ tag: z.string(), label: z.string() }).optional(),
+  hovered: z.object({ tag: z.string(), label: z.string() }).optional(),
   navigated: z.boolean().optional(),
   changed: z.boolean().optional(),
   note: z.string().max(500).optional(),
@@ -59,6 +88,8 @@ const stateSchema = z.object({
 const pageSchema = z.object({
   url: z.string(),
   title: z.string(),
+  adapter: z.string().optional(),
+  adapterNote: z.string().max(300).optional(),
   selection: z.string().optional(),
   text: z.string(),
   truncated: z.boolean().optional(),
@@ -187,6 +218,8 @@ export function buildBrowserTools(bridge: BrowserBridge = browserBridge) {
           (page) => ({
             url: page.url,
             title: page.title,
+            ...(page.adapter ? { adapter: page.adapter } : {}),
+            ...(page.adapterNote ? { adapterNote: page.adapterNote } : {}),
             ...(page.selection ? { selection: page.selection.slice(0, maxChars) } : {}),
             text: page.text.slice(0, maxChars),
             truncated: Boolean(page.truncated) || page.text.length > maxChars,
@@ -196,15 +229,25 @@ export function buildBrowserTools(bridge: BrowserBridge = browserBridge) {
     }),
     list_browser_elements: tool({
       description:
-        "List what can be clicked or scrolled on a page in the user's Chrome: links, buttons, tabs, sidebar items (each with a numeric ref), and scrollable panels (kind 'scroll'). Use the refs with click_browser_element and scroll_browser_page. Refs are only valid until the page changes, so list again after a click. Controls that send or change things (send, delete, leave, ...) are left out.",
+        "List what can be clicked or scrolled on a page in the user's Chrome: links, buttons, tabs, sidebar items (each with a numeric ref), and scrollable panels (kind 'scroll'). Use the refs with click_browser_element and scroll_browser_page. Refs are only valid until the page changes, so list again after a click. Controls that send or change things (send, delete, leave, ...) are left out. Use text to find one thing by name, or selector (CSS) to list what a selector matches when the usual listing misses it. On Slack, conversations carry a channelId and an openUrl that navigate_browser_tab can load.",
       inputSchema: z.object({
         profile: profileField,
         tabId: tabIdField,
         maxElements: z.number().int().min(10).max(300).default(150),
+        text: z
+          .string()
+          .max(100)
+          .optional()
+          .describe("Only list elements whose label contains this (case-insensitive)"),
+        selector: z
+          .string()
+          .max(300)
+          .optional()
+          .describe("CSS selector to list instead of the usual links and buttons"),
       }),
-      execute: ({ profile, tabId, maxElements }) =>
+      execute: ({ profile, tabId, maxElements, text, selector }) =>
         askFenced(
-          { type: "list_elements", tabId, maxElements },
+          { type: "list_elements", tabId, maxElements, text, selector },
           profile,
           elementsSchema,
           "browser-elements",
@@ -219,17 +262,70 @@ export function buildBrowserTools(bridge: BrowserBridge = browserBridge) {
           }),
         ),
     }),
-    click_browser_element: tool({
+    inspect_browser_page: tool({
       description:
-        "Click a link, tab or sidebar item on a page in the user's Chrome, by ref from list_browser_elements — for example to open another Slack channel. It only works inside the site the tab is already on: a link to another site is refused, and so is anything that sends, posts, deletes or changes something. It cannot type. Returns the tab's URL and title afterwards, and changed: false when neither moved — then the click may not have worked, so read_browser_page before saying it did.",
+        "Look at how part of a page in the user's Chrome is built, to work out why a listing or click didn't do what you expected. Returns up to `limit` elements matching a CSS selector: tag, id/class/role/aria-*/data-* attributes, a text snippet, size and position, whether it sits in something clickable, whether a click would be refused and why, and its children. Each match gets a ref for click_browser_element or scroll_browser_page. Read-only.",
       inputSchema: z.object({
         profile: profileField,
         tabId: tabIdField,
-        ref: z.number().int().describe("Ref from the latest list_browser_elements"),
+        selector: z.string().min(1).max(300).describe("CSS selector, e.g. '[role=treeitem]'"),
+        limit: z.number().int().min(1).max(30).default(10),
       }),
-      execute: ({ profile, tabId, ref }) =>
+      execute: ({ profile, tabId, selector, limit }) =>
         askFenced(
-          { type: "click", tabId, ref },
+          { type: "inspect", tabId, selector, limit },
+          profile,
+          inspectSchema,
+          "browser-inspect",
+          (found) => ({
+            ...found,
+            url: withoutQuery(found.url),
+          }),
+        ),
+    }),
+    click_browser_element: tool({
+      description:
+        "Click a link, tab or sidebar item on a page in the user's Chrome — by ref from list_browser_elements or inspect_browser_page, or by a CSS selector — for example to open another Slack channel. It only works inside the site the tab is already on: a link to another site is refused, and so is anything that sends, posts, deletes or changes something. It cannot type. Returns the tab's URL and title afterwards, and changed: false when neither moved — then the click may not have worked, so read_browser_page before saying it did.",
+      inputSchema: z
+        .object({
+          profile: profileField,
+          tabId: tabIdField,
+          ref: z
+            .number()
+            .int()
+            .optional()
+            .describe("Ref from the latest list_browser_elements or inspect_browser_page"),
+          selector: z
+            .string()
+            .max(300)
+            .optional()
+            .describe("CSS selector for the element, instead of a ref"),
+          index: z
+            .number()
+            .int()
+            .min(0)
+            .optional()
+            .describe("Which match of selector to click, from 0 (default 0)"),
+          mode: z
+            .enum(["center", "direct", "hover"])
+            .default("center")
+            .describe(
+              "center: click where a person would, the element under its middle (default). direct: send the click to the element itself, for when something covers it. hover: only move the pointer over it, to reveal a menu or buttons.",
+            ),
+          waitMs: z
+            .number()
+            .int()
+            .min(0)
+            .max(5000)
+            .optional()
+            .describe("How long to let the page react before reporting (default 900)"),
+        })
+        .refine((input) => (input.ref === undefined) !== (input.selector === undefined), {
+          message: "give either ref or selector",
+        }),
+      execute: ({ profile, tabId, ref, selector, index, mode, waitMs }) =>
+        askFenced(
+          { type: "click", tabId, ref, selector, index, mode, waitMs },
           profile,
           stateSchema,
           "browser-state",

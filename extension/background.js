@@ -24,6 +24,8 @@ const RECONNECT_ALARM = "yarvis-reconnect";
 /** Ceiling on a page's text whatever the caller asked for. */
 const MAX_TEXT_CHARS = 200_000;
 const MAX_ELEMENTS = 300;
+const MAX_INSPECT = 30;
+const MAX_WAIT_MS = 5_000;
 
 /** How long a click or scroll gets to change the page before it is read back. */
 const SETTLE_MS = 900;
@@ -100,9 +102,11 @@ async function run(command) {
     case "read_page":
       return readPage(command.tabId, command.maxChars);
     case "list_elements":
-      return listElements(command.tabId, command.maxElements);
+      return listElements(command);
+    case "inspect":
+      return inspect(command);
     case "click":
-      return click(command.tabId, command.ref);
+      return click(command);
     case "scroll":
       return scroll(command.tabId, command.ref, command.direction);
     case "navigate":
@@ -162,43 +166,74 @@ async function activeTabId() {
   return tab.id;
 }
 
-async function inPage(tabId, func, args) {
+/** Site adapters first, so page.js finds them when it loads. */
+const PAGE_FILES = ["adapters/slack.js", "page.js"];
+
+const SCREENS = { blockedSource: BLOCKED_LABEL_SOURCE, blockedPathSource: BLOCKED_PATH_SOURCE };
+
+/**
+ * Runs one of page.js's functions in the tab. The files are injected every time
+ * because a navigation replaces the page's world, and injecting into a page
+ * that already has them only redefines the same functions.
+ */
+async function inPage(tabId, name, options) {
+  await chrome.scripting.executeScript({ target: { tabId }, files: PAGE_FILES });
   const [injection] = await chrome.scripting.executeScript({
     target: { tabId },
-    func,
-    args,
+    func: (fn, args) => globalThis.__yarvis[fn](args),
+    args: [name, options],
   });
   if (!injection?.result) throw new Error("The page returned nothing.");
   return injection.result;
 }
 
-async function readPage(tabId, maxChars) {
-  const target = tabId ?? (await activeTabId());
-  return inPage(target, extractPage, [Math.min(maxChars ?? 20_000, MAX_TEXT_CHARS)]);
+/** A page-side refusal or bad selector becomes the tool's error. */
+function orThrow(result) {
+  if (result?.error) throw new Error(result.error);
+  return result;
 }
 
-async function listElements(tabId, maxElements) {
+async function readPage(tabId, maxChars) {
   const target = tabId ?? (await activeTabId());
-  return inPage(target, extractElements, [
-    Math.min(maxElements ?? 150, MAX_ELEMENTS),
-    BLOCKED_LABEL_SOURCE,
-    BLOCKED_PATH_SOURCE,
-  ]);
+  return inPage(target, "readPage", { maxChars: Math.min(maxChars ?? 20_000, MAX_TEXT_CHARS) });
+}
+
+async function listElements({ tabId, maxElements, selector, text }) {
+  const target = tabId ?? (await activeTabId());
+  return orThrow(
+    await inPage(target, "listElements", {
+      maxElements: Math.min(maxElements ?? 150, MAX_ELEMENTS),
+      selector,
+      text,
+      ...SCREENS,
+    }),
+  );
+}
+
+async function inspect({ tabId, selector, limit }) {
+  const target = tabId ?? (await activeTabId());
+  return orThrow(
+    await inPage(target, "inspect", {
+      selector,
+      limit: Math.min(limit ?? 10, MAX_INSPECT),
+      ...SCREENS,
+    }),
+  );
 }
 
 async function scroll(tabId, ref, direction) {
   const target = tabId ?? (await activeTabId());
-  const moved = await inPage(target, scrollElement, [ref ?? null, direction]);
-  if (moved.error) throw new Error(moved.error);
+  orThrow(await inPage(target, "scroll", { ref, direction }));
   // Chat lists load older messages lazily as the top comes into view, which
   // changes how far there is left to scroll, so the position is read after.
   await sleep(SETTLE_MS);
-  const position = await inPage(target, scrollElement, [ref ?? null, "stay"]);
+  const position = await inPage(target, "scroll", { ref, direction: "stay" });
   return { ...(await pageState(target)), atTop: position.atTop, atBottom: position.atBottom };
 }
 
-async function click(tabId, ref) {
+async function click({ tabId, ref, selector, index, mode, waitMs }) {
   const target = tabId ?? (await activeTabId());
+  const settle = Math.min(Math.max(waitMs ?? SETTLE_MS, 0), MAX_WAIT_MS);
   const before = await chrome.tabs.get(target);
 
   // A click can open a new tab (target=_blank, window.open). Close any that
@@ -212,13 +247,13 @@ async function click(tabId, ref) {
   let injectionError;
   await withNavigationLock(target, before.url ?? "", async () => {
     try {
-      result = await inPage(target, clickElement, [ref, BLOCKED_LABEL_SOURCE, BLOCKED_PATH_SOURCE]);
+      result = await inPage(target, "click", { ref, selector, index, mode, ...SCREENS });
     } catch (error) {
       // A click that starts a navigation can tear the page down before the script
       // reports back. The checks below still have to run.
       injectionError = error;
     }
-    await sleep(SETTLE_MS);
+    await sleep(settle);
   });
   chrome.tabs.onCreated.removeListener(onCreated);
   for (const id of opened) await chrome.tabs.remove(id).catch(() => {});
@@ -234,15 +269,17 @@ async function click(tabId, ref) {
   if (result?.error) throw new Error(result.error);
   if (injectionError && before.url === after.url) throw injectionError;
   const changed = before.url !== after.url || before.title !== after.title;
+  if (mode === "hover") return { ...(await pageState(target)), hovered: result?.clicked };
   return {
     ...(await pageState(target)),
+    clicked: result?.clicked,
     navigated: before.url !== after.url,
     changed,
     // A click that moves nothing is easy to mistake for one that worked.
     ...(changed
       ? {}
       : {
-          note: "The click was delivered, but the page's address and title did not change. It may have opened something in place (a menu, a thread), or done nothing. Read the page before saying what happened.",
+          note: "The click was delivered, but the page's address and title did not change. It may have opened something in place (a menu, a thread), or done nothing. Read the page before saying what happened; if nothing happened, inspect_browser_page the element and try something inside it, mode 'direct', or its openUrl.",
         }),
   };
 }
@@ -301,252 +338,6 @@ function waitForLoad(tabId) {
 async function pageState(tabId) {
   const tab = await chrome.tabs.get(tabId);
   return { url: tab.url ?? "", title: tab.title ?? "" };
-}
-
-// The functions below run inside the page, so each must be self-contained.
-
-function extractPage(maxChars) {
-  const text = document.body?.innerText ?? "";
-  return {
-    url: location.href,
-    title: document.title,
-    selection: String(getSelection() ?? ""),
-    text: text.slice(0, maxChars),
-    truncated: text.length > maxChars,
-  };
-}
-
-// Numbers each thing worth clicking and remembers the element, so a later click
-// names a number instead of a selector the page could have changed under us.
-function extractElements(maxElements, blockedSource, blockedPathSource) {
-  const blocked = new RegExp(blockedSource, "i");
-  const blockedPath = new RegExp(blockedPathSource, "i");
-  const refs = new Map();
-  window.__yarvisRefs = refs;
-  const selector =
-    'a[href],button,summary,[role="button"],[role="link"],[role="tab"],[role="treeitem"],[role="menuitem"],[role="option"]';
-  const visible = (el) => {
-    const rect = el.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) return false;
-    const style = getComputedStyle(el);
-    return style.visibility !== "hidden" && style.display !== "none";
-  };
-  // A link to a page on this site is screened by its address, not its label: a
-  // channel called "post-mortems" should open, but a link to /logout should not.
-  // Anything else (a button, a "#" or javascript: link) has its label screened.
-  const isNavigation = (el) => {
-    const raw = el.tagName === "A" ? el.getAttribute("href") : null;
-    if (!raw || raw.startsWith("#")) return false;
-    try {
-      return new URL(el.href).origin === location.origin;
-    } catch {
-      return false;
-    }
-  };
-  const labelOf = (el) =>
-    (el.getAttribute("aria-label") || el.innerText || el.title || "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 120);
-
-  const elements = [];
-  let next = 1;
-  let truncated = false;
-  for (const el of document.querySelectorAll(selector)) {
-    if (!visible(el) || el.disabled) continue;
-    // A <button> with no type attribute reports "submit" even outside a form, so
-    // only one that sits in a form is a submit control.
-    if (el.tagName === "BUTTON" && el.form && el.type === "submit") continue;
-    if (el.tagName === "INPUT" && el.type === "submit") continue;
-    const label = labelOf(el);
-    if (!label) continue;
-    if (isNavigation(el)) {
-      const url = new URL(el.href);
-      if (blockedPath.test(url.pathname + url.search)) continue;
-    } else if (blocked.test(label)) {
-      continue;
-    }
-    if (elements.length >= maxElements) {
-      truncated = true;
-      break;
-    }
-    const ref = next++;
-    refs.set(ref, el);
-    elements.push({
-      ref,
-      kind: el.tagName === "A" ? "link" : el.getAttribute("role") || "button",
-      label,
-      ...(el.tagName === "A" ? { href: el.href } : {}),
-    });
-  }
-
-  // Message lists and side panels scroll on their own, not with the window.
-  let scrollers = 0;
-  for (const el of document.querySelectorAll("div,main,section,ul,ol")) {
-    if (scrollers >= 10) break;
-    if (el.clientHeight < 200 || el.scrollHeight <= el.clientHeight + 50) continue;
-    const overflow = getComputedStyle(el).overflowY;
-    if (overflow !== "auto" && overflow !== "scroll") continue;
-    const ref = next++;
-    refs.set(ref, el);
-    scrollers++;
-    elements.push({
-      ref,
-      kind: "scroll",
-      label: (el.getAttribute("aria-label") || el.getAttribute("role") || el.tagName).slice(0, 120),
-    });
-  }
-
-  return { url: location.href, title: document.title, elements, truncated };
-}
-
-function clickElement(ref, blockedSource, blockedPathSource) {
-  const el = window.__yarvisRefs?.get(ref);
-  if (!el || !el.isConnected) {
-    return { error: "That element is gone. List the page's elements again." };
-  }
-  // Must match the selector extractElements lists by. The ref map also holds
-  // scrollable panels, and a click at the middle of a message pane would land
-  // on whatever message happens to be there.
-  const clickable =
-    'a[href],button,summary,[role="button"],[role="link"],[role="tab"],[role="treeitem"],[role="menuitem"],[role="option"]';
-  if (!el.matches(clickable)) {
-    return {
-      error: "That ref is a scrollable panel, not something to click. Use scroll_browser_page.",
-    };
-  }
-  const blocked = new RegExp(blockedSource, "i");
-  const labelOf = (node) =>
-    (node.getAttribute("aria-label") || node.innerText || node.title || "")
-      .replace(/\s+/g, " ")
-      .trim();
-  // A same-site link to a page moves around rather than acting, so it is judged
-  // by its address instead of its label.
-  const linkTarget = (node) => {
-    if (node.tagName !== "A") return null;
-    const raw = node.getAttribute("href");
-    if (!raw || raw.startsWith("#")) return null;
-    try {
-      const url = new URL(node.href);
-      return url.origin === location.origin ? url : null;
-    } catch {
-      return null;
-    }
-  };
-
-  // Click where a person would: the element under the middle of it. Apps like
-  // Slack put the handler on something inside a sidebar row, and an event sent
-  // to the row itself only bubbles up, never down to it. If something else is
-  // covering that point, the listed element takes the click instead.
-  el.scrollIntoView({ block: "center", behavior: "instant" });
-  const rect = el.getBoundingClientRect();
-  const x = rect.left + rect.width / 2;
-  const y = rect.top + rect.height / 2;
-  const hit = document.elementFromPoint(x, y);
-  const target = hit && el.contains(hit) ? hit : el;
-
-  // What is really clicked can be a control nested in the row rather than the
-  // row itself. The listed element passed extractElements' screens; a nested
-  // control has to pass the same ones here, and an unlabelled one (an icon-only
-  // delete button) is refused rather than trusted.
-  const control = target.closest(clickable);
-  const nested = control && control !== el && el.contains(control) ? control : null;
-  for (const node of nested ? [el, nested] : [el]) {
-    if (node.disabled) return { error: "That control is disabled." };
-    if (node.type === "submit" && (node.tagName === "INPUT" || node.form)) {
-      return { error: "That control submits a form, so Yarvis won't click it." };
-    }
-    const link = linkTarget(node);
-    if (link) {
-      if (new RegExp(blockedPathSource, "i").test(link.pathname + link.search)) {
-        return { error: "That link changes something on the site, so Yarvis won't open it." };
-      }
-      continue;
-    }
-    const label = labelOf(node);
-    if (!label && node === nested) {
-      return {
-        error:
-          "Something without a label sits where that would be clicked, so Yarvis won't click it.",
-      };
-    }
-    if (blocked.test(label)) {
-      return { error: "That control changes or sends something, so Yarvis won't click it." };
-    }
-  }
-
-  const anchor = target.closest("a[href]");
-  if (anchor) {
-    let url;
-    try {
-      url = new URL(anchor.href);
-    } catch {
-      return { error: "That link has no usable address." };
-    }
-    if (url.origin !== location.origin) {
-      return { error: "That link leaves this site. Yarvis stays on the current site." };
-    }
-    if (anchor.target && anchor.target !== "_self") {
-      return { error: "That link opens a new tab. Yarvis works in the current tab only." };
-    }
-  }
-
-  // The sequence a real mouse click produces; some apps act on pointerdown or
-  // mousedown and never look at the click. The pointer is also moved off
-  // afterwards, so no hover state is left behind to reveal buttons on the row.
-  const base = {
-    cancelable: true,
-    composed: true,
-    clientX: x,
-    clientY: y,
-    button: 0,
-    view: window,
-  };
-  const pointer = { pointerId: 1, pointerType: "mouse", isPrimary: true };
-  const fire = (type, init) => {
-    const Kind = type.startsWith("pointer") ? PointerEvent : MouseEvent;
-    const event = new Kind(type, { ...base, ...pointer, bubbles: true, ...init });
-    target.dispatchEvent(event);
-    return event;
-  };
-  fire("pointerover", { buttons: 0 });
-  fire("pointerenter", { buttons: 0, bubbles: false });
-  fire("mouseover", { buttons: 0 });
-  fire("mouseenter", { buttons: 0, bubbles: false });
-  fire("pointerdown", { buttons: 1, detail: 1 });
-  const down = fire("mousedown", { buttons: 1, detail: 1 });
-  // The browser focuses the nearest focusable element unless mousedown was cancelled.
-  const focusable = target.closest("a[href],button,[tabindex],summary,input,select,textarea");
-  if (!down.defaultPrevented && focusable) focusable.focus({ preventScroll: true });
-  fire("pointerup", { buttons: 0, detail: 1 });
-  fire("mouseup", { buttons: 0, detail: 1 });
-  fire("click", { buttons: 0, detail: 1 });
-  fire("pointerout", { buttons: 0 });
-  fire("pointerleave", { buttons: 0, bubbles: false });
-  fire("mouseout", { buttons: 0 });
-  fire("mouseleave", { buttons: 0, bubbles: false });
-  return { ok: true };
-}
-
-function scrollElement(ref, direction) {
-  const el =
-    ref === null
-      ? document.scrollingElement || document.documentElement
-      : window.__yarvisRefs?.get(ref);
-  if (!el || !el.isConnected) {
-    return { error: "That element is gone. List the page's elements again." };
-  }
-  const step = el.clientHeight * 0.8;
-  if (direction === "stay") {
-    // Only reports where the panel is.
-  } else if (direction === "up") el.scrollBy({ top: -step });
-  else if (direction === "down") el.scrollBy({ top: step });
-  else if (direction === "top") el.scrollTop = 0;
-  else el.scrollTop = el.scrollHeight;
-  return {
-    atTop: el.scrollTop <= 0,
-    atBottom: el.scrollTop + el.clientHeight >= el.scrollHeight - 2,
-  };
 }
 
 // A rule left behind by a worker that died mid-command would keep blocking a tab.

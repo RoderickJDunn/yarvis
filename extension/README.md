@@ -63,6 +63,27 @@ install command (they differ per profile only if loaded from a different path).
   panels on a page, each with a numeric ref.
 - `click_browser_element`, `scroll_browser_page`, `navigate_browser_tab` — act on
   a ref, scroll (to load older messages), or load an address.
+- `inspect_browser_page` — how part of a page is built (tag, role, aria/data
+  attributes, text, size, children, and whether a click would be refused), for
+  an agent working out why a click or listing missed. Matches get refs.
+
+When a click does nothing, the agent can recover without new code: list or
+inspect with a CSS `selector`, click by `selector` instead of a ref, click with
+`mode: "direct"` (at the element itself rather than whatever is under its
+middle), or `mode: "hover"` to reveal a menu first. However the target is
+chosen, the same screens below apply to what the click really lands on.
+
+### Site adapters
+
+`extension/adapters/` holds per-site code that changes what the same tools
+return, never what they may do. Slack's (`adapters/slack.js`) turns
+`read_browser_page` into a message transcript and tags sidebar conversations
+with a `channelId` and an `openUrl`. Slack's markup isn't a public interface, so
+when the adapter finds nothing it recognises the tools fall back to the generic
+behaviour and the result carries an `adapterNote` saying so.
+
+The code that runs inside the page lives in `extension/page.js`, injected with
+the adapters before each command.
 
 ### What keeps it on the site
 

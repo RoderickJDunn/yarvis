@@ -16,8 +16,23 @@
 export type BrowserCommand =
   | { type: "list_tabs" }
   | { type: "read_page"; tabId?: number; maxChars: number }
-  | { type: "list_elements"; tabId?: number; maxElements: number }
-  | { type: "click"; tabId?: number; ref: number }
+  | {
+      type: "list_elements";
+      tabId?: number;
+      maxElements: number;
+      selector?: string;
+      text?: string;
+    }
+  | { type: "inspect"; tabId?: number; selector: string; limit: number }
+  | {
+      type: "click";
+      tabId?: number;
+      ref?: number;
+      selector?: string;
+      index?: number;
+      mode?: "center" | "direct" | "hover";
+      waitMs?: number;
+    }
   | { type: "scroll"; tabId?: number; ref?: number; direction: "up" | "down" | "top" | "bottom" }
   | { type: "navigate"; tabId?: number; url: string };
 

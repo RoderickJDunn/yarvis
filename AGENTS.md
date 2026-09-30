@@ -476,6 +476,11 @@ back to ad-hoc.
   the sidecar: it stays on the tab's origin, refuses controls that send or
   change things, and there is no tool that types. The two that act
   (`click_browser_element`, `navigate_browser_tab`) are in `destructiveTools.ts`,
-  so a spoken turn asks first.
+  so a spoken turn asks first. Everything that runs inside the page is
+  `extension/page.js`, and every way of picking a click target — a listed ref, an
+  inspected one, a CSS selector the model wrote — ends in its one set of
+  screens, applied to what the click actually lands on. Per-site behaviour goes
+  in `extension/adapters/` and may change what a tool returns, never what it may
+  do.
 - Follow the repo's existing comment style: comments explain *why*, not
   *what* — no restating what a well-named function already says.

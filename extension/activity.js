@@ -27,6 +27,7 @@ export const TOOL_FOR_COMMAND = {
   list_tabs: "list_browser_tabs",
   read_page: "read_browser_page",
   list_elements: "list_browser_elements",
+  inspect: "inspect_browser_page",
   click: "click_browser_element",
   scroll: "scroll_browser_page",
   navigate: "navigate_browser_tab",
