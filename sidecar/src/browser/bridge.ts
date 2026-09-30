@@ -7,6 +7,10 @@
  * the browser queues a command here and waits for the answer to come back on
  * `/browser/result`. Nothing is stored — a command that nobody collects times
  * out, and a page's text lives only as long as the tool call that asked for it.
+ *
+ * Each Chrome profile running the extension polls under its own id and a name
+ * the user gives it ("work", "personal"), so a tool can say which browser it
+ * means. Every profile gets its own queue.
  */
 
 export type BrowserCommand =
@@ -22,10 +26,17 @@ export interface QueuedCommand {
   command: BrowserCommand;
 }
 
+/** A Chrome profile as it identifies itself when it polls. */
+export interface BrowserProfile {
+  /** Random and stable per profile; the name can change, this can't. */
+  id: string;
+  name: string;
+}
+
 /**
  * What a poll resolves to. "superseded" is distinct from an idle expiry (null) so
- * two hosts — two Chrome profiles — don't tight-loop displacing each other: the
- * displaced one is told, and backs off.
+ * two hosts polling as the same profile don't tight-loop displacing each other:
+ * the displaced one is told, and backs off.
  */
 export type PollResult = QueuedCommand | null | "superseded";
 
@@ -35,11 +46,17 @@ export interface CommandResult {
   error?: string;
 }
 
+export interface RequestOptions {
+  /** Profile name or id. Needed only when more than one profile is connected. */
+  profile?: string;
+  timeoutMs?: number;
+}
+
 /** How long a poll is held open before it answers "nothing yet". */
 export const POLL_HOLD_MS = 25_000;
 
 /**
- * How recently the extension must have polled to count as connected. A poll is
+ * How recently a profile must have polled to count as connected. A poll is
  * re-issued as soon as one answers, so a gap this long means the browser or the
  * host is gone — and failing fast beats making the agent wait out a timeout.
  */
@@ -56,7 +73,15 @@ export class BrowserNotConnectedError extends Error {
   }
 }
 
+interface Channel {
+  profile: BrowserProfile;
+  lastPollAt: number;
+  queue: QueuedCommand[];
+  waiter: ((next: PollResult) => void) | null;
+}
+
 interface Inflight {
+  channel: Channel;
   resolve: (result: CommandResult) => void;
   timer: ReturnType<typeof setTimeout>;
 }
@@ -69,65 +94,74 @@ export class BrowserBridge {
    */
   readonly token: string;
 
-  private lastPollAt = 0;
-  private readonly queue: QueuedCommand[] = [];
+  private readonly channels = new Map<string, Channel>();
   private readonly inflight = new Map<string, Inflight>();
-  private waiter: ((next: PollResult) => void) | null = null;
 
   constructor(token = randomToken()) {
     this.token = token;
   }
 
-  get connected(): boolean {
-    return Date.now() - this.lastPollAt < CONNECTED_WITHIN_MS;
+  /** The profiles that have polled recently enough to answer a command. */
+  profiles(): BrowserProfile[] {
+    return [...this.channels.values()].filter(isLive).map((channel) => ({ ...channel.profile }));
   }
 
-  /** Queues a command and resolves with what the extension answered. */
-  request(command: BrowserCommand, timeoutMs = REQUEST_TIMEOUT_MS): Promise<CommandResult> {
-    if (!this.connected) return Promise.reject(new BrowserNotConnectedError());
+  get connected(): boolean {
+    return this.profiles().length > 0;
+  }
+
+  /** Queues a command for one profile and resolves with what it answered. */
+  request(command: BrowserCommand, options: RequestOptions = {}): Promise<CommandResult> {
+    let channel: Channel;
+    try {
+      channel = this.pick(options.profile);
+    } catch (error) {
+      return Promise.reject(error);
+    }
     const id = crypto.randomUUID();
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
         this.inflight.delete(id);
-        const queued = this.queue.findIndex((q) => q.id === id);
-        if (queued >= 0) this.queue.splice(queued, 1);
+        const queued = channel.queue.findIndex((q) => q.id === id);
+        if (queued >= 0) channel.queue.splice(queued, 1);
         resolve({ ok: false, error: "The browser did not answer in time." });
-      }, timeoutMs);
-      this.inflight.set(id, { resolve, timer });
+      }, options.timeoutMs ?? REQUEST_TIMEOUT_MS);
+      this.inflight.set(id, { channel, resolve, timer });
       const item = { id, command };
-      if (this.waiter) {
-        const wake = this.waiter;
-        this.waiter = null;
+      if (channel.waiter) {
+        const wake = channel.waiter;
+        channel.waiter = null;
         wake(item);
       } else {
-        this.queue.push(item);
+        channel.queue.push(item);
       }
     });
   }
 
   /**
-   * The extension's poll: the next command, or null after `holdMs`. A newer poll
-   * supersedes an older one (a restarted host would otherwise leave a dead
-   * waiter swallowing the next command).
+   * A profile's poll: the next command for it, or null after `holdMs`. A newer
+   * poll from the same profile supersedes an older one (a restarted host would
+   * otherwise leave a dead waiter swallowing the next command).
    */
-  next(holdMs = POLL_HOLD_MS, signal?: AbortSignal): Promise<PollResult> {
-    this.lastPollAt = Date.now();
-    this.waiter?.("superseded");
-    this.waiter = null;
-    const ready = this.queue.shift();
+  next(profile: BrowserProfile, holdMs = POLL_HOLD_MS, signal?: AbortSignal): Promise<PollResult> {
+    const channel = this.channelFor(profile);
+    channel.lastPollAt = Date.now();
+    channel.waiter?.("superseded");
+    channel.waiter = null;
+    const ready = channel.queue.shift();
     if (ready) return Promise.resolve(ready);
     return new Promise((resolve) => {
       const finish = (value: PollResult) => {
         clearTimeout(timer);
         signal?.removeEventListener("abort", onAbort);
-        if (this.waiter === finish) this.waiter = null;
-        this.lastPollAt = Date.now();
+        if (channel.waiter === finish) channel.waiter = null;
+        channel.lastPollAt = Date.now();
         resolve(value);
       };
       const onAbort = () => finish(null);
       const timer = setTimeout(() => finish(null), holdMs);
       signal?.addEventListener("abort", onAbort);
-      this.waiter = finish;
+      channel.waiter = finish;
     });
   }
 
@@ -137,7 +171,7 @@ export class BrowserBridge {
    * in nobody's hands, and the tool waits out its whole timeout.
    */
   requeue(item: QueuedCommand): void {
-    if (this.inflight.has(item.id)) this.queue.unshift(item);
+    this.inflight.get(item.id)?.channel.queue.unshift(item);
   }
 
   /** Delivers an answer. False when nothing is waiting on it (late or unknown id). */
@@ -149,6 +183,45 @@ export class BrowserBridge {
     pending.resolve(result);
     return true;
   }
+
+  private channelFor(profile: BrowserProfile): Channel {
+    const existing = this.channels.get(profile.id);
+    if (existing) {
+      // The user can rename a profile at any time; the id is what stays put.
+      existing.profile.name = profile.name;
+      return existing;
+    }
+    const channel: Channel = { profile: { ...profile }, lastPollAt: 0, queue: [], waiter: null };
+    this.channels.set(profile.id, channel);
+    return channel;
+  }
+
+  private pick(wanted: string | undefined): Channel {
+    const live = [...this.channels.values()].filter(isLive);
+    if (live.length === 0) throw new BrowserNotConnectedError();
+    const names = live.map((channel) => channel.profile.name).join(", ");
+    if (wanted === undefined) {
+      if (live.length === 1) return live[0] as Channel;
+      throw new Error(
+        `Several Chrome profiles are connected (${names}). Say which one with the profile argument.`,
+      );
+    }
+    const key = wanted.trim().toLowerCase();
+    const matches = live.filter(
+      (channel) => channel.profile.id === wanted || channel.profile.name.toLowerCase() === key,
+    );
+    if (matches.length === 1) return matches[0] as Channel;
+    if (matches.length > 1) {
+      throw new Error(
+        `More than one connected Chrome profile is called "${wanted}". Rename one in the Yarvis extension's popup.`,
+      );
+    }
+    throw new Error(`No connected Chrome profile is called "${wanted}". Connected: ${names}.`);
+  }
+}
+
+function isLive(channel: Channel): boolean {
+  return Date.now() - channel.lastPollAt < CONNECTED_WITHIN_MS;
 }
 
 function randomToken(): string {

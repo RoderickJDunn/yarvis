@@ -3,13 +3,14 @@ import { BrowserBridge } from "./bridge.ts";
 import { buildBrowserTools } from "./tools.ts";
 
 const opts = { toolCallId: "t", messages: [] };
+const profile = { id: "p1", name: "work" };
 
 /** A bridge whose extension answers every command with `reply`. */
 function answering(reply: { ok: boolean; data?: unknown; error?: string }) {
   const bridge = new BrowserBridge("t");
   const serve = async () => {
     for (;;) {
-      const item = await bridge.next(50);
+      const item = await bridge.next(profile, 50);
       if (item && item !== "superseded") bridge.complete(item.id, reply);
       else if (!bridge.connected) return;
     }
@@ -47,6 +48,26 @@ describe("browser tools", () => {
     expect(out.tabs.endsWith(`</browser-tabs-${nonce}>`)).toBe(true);
   });
 
+  it("lists tabs from every connected profile, grouped by profile name", async () => {
+    const bridge = new BrowserBridge("t");
+    const serve = async (who: { id: string; name: string }, title: string) => {
+      const item = await bridge.next(who, 1000);
+      if (!item || item === "superseded") throw new Error("expected a command");
+      const tab = { id: 1, windowId: 1, active: true, title, url: "https://a" };
+      bridge.complete(item.id, { ok: true, data: [tab] });
+    };
+    const served = Promise.all([
+      serve({ id: "w", name: "work" }, "Slack"),
+      serve({ id: "h", name: "home" }, "Recipes"),
+    ]);
+    const tools = buildBrowserTools(bridge);
+    const out = await run<{ tabs: string }>(tools.list_browser_tabs, {});
+    await served;
+    const groups = JSON.parse(out.tabs.split("\n").slice(1, -1).join("\n"));
+    expect(groups.map((g: { profile: string }) => g.profile)).toEqual(["work", "home"]);
+    expect(groups[0].tabs[0].title).toBe("Slack");
+  });
+
   it("drops the query string and fragment from listed URLs", async () => {
     const tabs = [{ id: 1, windowId: 1, active: true, title: "t", url: "https://a/b?token=s#x" }];
     const tools = buildBrowserTools(answering({ ok: true, data: tabs }));
@@ -65,7 +86,7 @@ describe("browser tools", () => {
     const bridge = new BrowserBridge("t");
     const seen: unknown[] = [];
     const serve = async () => {
-      const item = await bridge.next(1000);
+      const item = await bridge.next(profile, 1000);
       if (!item || item === "superseded") throw new Error("expected a command");
       seen.push(item.command);
       bridge.complete(item.id, { ok: false, error: "stop" });
@@ -100,7 +121,7 @@ describe("browser tools", () => {
     const seen: unknown[] = [];
     const serve = async () => {
       for (let i = 0; i < 3; i++) {
-        const item = await bridge.next(1000);
+        const item = await bridge.next(profile, 1000);
         if (!item || item === "superseded") throw new Error("expected a command");
         seen.push(item.command);
         bridge.complete(item.id, { ok: true, data: { url: "https://a/b", title: "t" } });

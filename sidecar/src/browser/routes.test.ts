@@ -19,7 +19,7 @@ function setup() {
 describe("browser bridge routes", () => {
   it("rejects every route without the scoped token", async () => {
     const { app } = setup();
-    expect((await app.request("/next", { headers: host })).status).toBe(401);
+    expect((await app.request("/next?profile=p1&name=work", { headers: host })).status).toBe(401);
     expect(
       (
         await app.request("/result", {
@@ -30,18 +30,33 @@ describe("browser bridge routes", () => {
       ).status,
     ).toBe(401);
     const wrong = { ...host, Authorization: "Bearer test-token" };
-    expect((await app.request("/next", { headers: wrong })).status).toBe(401);
+    expect((await app.request("/next?profile=p1&name=work", { headers: wrong })).status).toBe(401);
   });
 
   it("refuses a request addressed to another host name", async () => {
     const { app, auth } = setup();
-    const res = await app.request("/next", { headers: { ...auth, Host: "evil.example:8765" } });
+    const res = await app.request("/next?profile=p1&name=work", {
+      headers: { ...auth, Host: "evil.example:8765" },
+    });
     expect(res.status).toBe(403);
+  });
+
+  it("refuses a poll that doesn't say which profile it is", async () => {
+    const { app, auth } = setup();
+    const res = await app.request("/next", { headers: auth });
+    expect(res.status).toBe(400);
+  });
+
+  it("strips control characters from the profile name", async () => {
+    const { bridge, app, auth } = setup();
+    void app.request("/next?profile=p1&name=%1Bwork%0A", { headers: auth });
+    while (!bridge.connected) await Bun.sleep(1);
+    expect(bridge.profiles()).toEqual([{ id: "p1", name: "work" }]);
   });
 
   it("carries a command out and its result back", async () => {
     const { bridge, app, auth } = setup();
-    const polled = app.request("/next", { headers: auth });
+    const polled = app.request("/next?profile=p1&name=work", { headers: auth });
     // The poll reaching the handler is what marks the extension connected.
     while (!bridge.connected) await Bun.sleep(1);
     const answer = bridge.request({ type: "list_tabs" });

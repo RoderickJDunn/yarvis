@@ -1,7 +1,7 @@
 import { syncBuiltins } from "./agentTools/registry.ts";
 import { createApp } from "./app.ts";
 import { browserBridge } from "./browser/bridge.ts";
-import { writeDiscovery } from "./browser/discovery.ts";
+import { removeDiscoveryOnExit, writeDiscovery } from "./browser/discovery.ts";
 import { loadConfig, loadInstanceConfig } from "./config.ts";
 import { getDb } from "./db/client.ts";
 import { runMigrations } from "./db/migrate.ts";
@@ -65,13 +65,15 @@ if (config.tokenGenerated) {
 }
 
 // The extension's native host finds this sidecar through a file, since the port
-// is new each launch. Machine-singular like the Telegram bot: with several
-// instances running only the one that owns background work is the browser's.
-if (instance.backgroundWorkers) {
-  writeDiscovery(config.port, browserBridge.token).catch((e) =>
-    console.error("[browser] could not write the discovery file:", e),
-  );
-}
+// is new each launch. Every instance writes one, so several can share a browser.
+writeDiscovery({
+  name: instance.name,
+  port: config.port,
+  token: browserBridge.token,
+  pid: process.pid,
+})
+  .then(removeDiscoveryOnExit)
+  .catch((e) => console.error("[browser] could not write the discovery file:", e));
 
 if (config.databaseUrl) {
   runMigrations(config.databaseUrl)

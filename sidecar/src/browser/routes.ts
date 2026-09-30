@@ -14,6 +14,23 @@ import { type BrowserBridge, browserBridge } from "./bridge.ts";
 /** A page's text is capped by the tool asking for it; this bounds a misbehaving sender. */
 const MAX_RESULT_BYTES = 2_000_000;
 
+/**
+ * How a Chrome profile identifies itself. The name is what the user typed in the
+ * extension and what a model passes back, so it is kept short and printable.
+ */
+const profileSchema = z.object({
+  id: z.string().regex(/^[A-Za-z0-9-]{1,64}$/),
+  name: z
+    .string()
+    .transform((name) =>
+      name
+        .replace(/[\p{C}]/gu, "")
+        .trim()
+        .slice(0, 40),
+    )
+    .pipe(z.string().min(1)),
+});
+
 const resultSchema = z.object({
   id: z.string().min(1).max(64),
   ok: z.boolean(),
@@ -45,8 +62,13 @@ export function createBrowserRoutes(
 
   // Long poll: answers with the next command, or 204 once the hold expires.
   router.get("/next", async (c) => {
+    const profile = profileSchema.safeParse({
+      id: c.req.query("profile"),
+      name: c.req.query("name"),
+    });
+    if (!profile.success) return c.json({ error: "profile id and name required" }, 400);
     const signal = c.req.raw.signal;
-    const next = await bridge.next(undefined, signal);
+    const next = await bridge.next(profile.data, undefined, signal);
     if (next === "superseded") return c.json({ error: "another host is polling" }, 409);
     if (!next) return c.body(null, 204);
     // The client can vanish between the command being handed over and the answer

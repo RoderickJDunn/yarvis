@@ -465,9 +465,12 @@ back to ad-hoc.
   connect *out*, so the direction is reversed: a native-messaging host
   (`scripts/browser/host.ts`) long-polls the sidecar's `/browser/next` and posts
   answers to `/browser/result`, behind a scoped token like attention-ingest and
-  `/mcp`. The token and the (per-launch) port reach the host through
-  `~/.yarvis/browser.json`, written only by the instance that owns background
-  work. Everything a page says is third-party text — a Slack DM is prime
+  `/mcp`. The token and the (per-launch) port reach the host through one file per
+  instance in `~/.yarvis/browser/instances/`, and the host polls every live
+  instance — nothing about the browser is singular to the machine, so this is
+  deliberately not behind `instance.rs`. Each Chrome profile polls under an id
+  and a name the user sets in the extension's popup, and every tool takes that
+  name as `profile`. Everything a page says is third-party text — a Slack DM is prime
   injection material — so `browser/tools.ts` fences it with a per-request nonce.
   The tools may click, scroll and navigate but the extension holds the line, not
   the sidecar: it stays on the tab's origin, refuses controls that send or

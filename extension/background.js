@@ -9,7 +9,12 @@
 // An open native port keeps an MV3 service worker alive (Chrome 116+), and a
 // dropped one is retried on an alarm, so the worker comes back after Chrome
 // idles it or the host exits.
+//
+// Each Chrome profile has its own copy of this extension, and each one tells the
+// host who it is: a random id kept for good, and a name the user sets in the
+// popup. That name is what an agent passes to reach "the work profile".
 
+import { loadProfile, PROFILE_KEY } from "./profile.js";
 import { BLOCKED_LABEL_SOURCE, BLOCKED_PATH_SOURCE, isBlockedPath, sameOrigin } from "./site.js";
 
 const HOST = "com.yarvis.browser";
@@ -38,10 +43,34 @@ function connect() {
     // Read lastError so Chrome doesn't log an unchecked-error warning.
     void chrome.runtime.lastError;
     port = null;
+    setStatus({ hostConnected: false, instances: [] });
   });
+  setStatus({ hostConnected: true, instances: [] });
+  sayHello();
+}
+
+/** Tells the host who this profile is; it polls nothing until it knows. */
+async function sayHello() {
+  const profile = await loadProfile();
+  port?.postMessage({ type: "hello", profileId: profile.id, name: profile.name });
+}
+
+/**
+ * The popup reads this from session storage rather than asking the worker, so
+ * it shows the last known state even while the worker is starting back up.
+ */
+function setStatus(status) {
+  chrome.storage.session.set({ status });
+  const connected = status.instances.filter((instance) => instance.connected).length;
+  chrome.action.setBadgeText({ text: connected > 0 ? String(connected) : "" });
+  chrome.action.setBadgeBackgroundColor({ color: "#2e7d32" });
 }
 
 async function onMessage(message) {
+  if (message?.type === "status") {
+    setStatus({ hostConnected: true, instances: message.instances ?? [] });
+    return;
+  }
   if (message?.type !== "command") return;
   let reply;
   try {
@@ -423,6 +452,16 @@ chrome.declarativeNetRequest.getSessionRules().then((rules) =>
     removeRuleIds: rules.map((rule) => rule.id),
   }),
 );
+
+// A rename in the popup reaches the host straight away.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && changes[PROFILE_KEY]) sayHello();
+});
+
+// Opening the popup is the moment someone wants a fresh answer.
+chrome.runtime.onMessage.addListener((message) => {
+  if (message?.type === "reconnect") connect();
+});
 
 chrome.runtime.onStartup.addListener(connect);
 chrome.runtime.onInstalled.addListener(connect);

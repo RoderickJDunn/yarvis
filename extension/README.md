@@ -18,9 +18,15 @@ Yarvis sidecar  <--HTTP long poll-->  native host  <--stdio-->  extension
  /browser/result)
 ```
 
-- The sidecar picks a new port each launch, so on startup it writes
-  `~/.yarvis/browser.json` (port + a scoped token, mode 0600). The host reads it
-  fresh on every poll, so restarting Yarvis needs nothing on your side.
+- The sidecar picks a new port each launch, so on startup each running Yarvis
+  instance writes `~/.yarvis/browser/instances/<instance>.json` (name, port, a
+  scoped token and its pid, mode 0600). The host rescans that folder every few
+  seconds and polls every live instance, so restarting Yarvis, or running a
+  second one with `bun run dev:instance <name>`, needs nothing on your side.
+- Each Chrome profile running the extension polls under its own name, which you
+  set in the extension's popup. Tools take that name as `profile`, so you can
+  say "look at Slack in my work profile". With one profile connected the name
+  can be left out.
 - The token reaches only the two `/browser` routes — never the full-access
   bearer.
 - Chrome only starts the host for extension ids listed in the host manifest.
@@ -31,14 +37,21 @@ Yarvis sidecar  <--HTTP long poll-->  native host  <--stdio-->  extension
    `extension/` directory. Note the extension id it shows.
 2. `bun run browser:install <extension-id>` — registers the native-messaging
    host with Chrome (macOS, Google Chrome).
-3. Reload the extension. With Yarvis running, ask it about your current tab.
+3. Reload the extension, then click its toolbar icon and give this profile a
+   name (e.g. `work`).
+4. With Yarvis running, ask it about your current tab.
+
+The popup shows whether the helper is running and which Yarvis instances it can
+reach, with a dot for whether each one is answering. The badge on the icon is
+the number of connected instances.
 
 Repeat step 1 in each profile you want Yarvis to see, adding each id to the
 install command (they differ per profile only if loaded from a different path).
 
 ## What the agent can do
 
-- `list_browser_tabs` — id, window, title, URL of every open tab.
+- `list_browser_tabs` — id, window, title, URL of every open tab, grouped by
+  Chrome profile.
 - `read_browser_page` — URL, title, selection and visible text of a tab (the
   active one by default), capped in length.
 - `list_browser_elements` — the links, buttons, sidebar items and scrollable
@@ -83,7 +96,8 @@ you turn that on for it in `chrome://extensions`; leave it off.
 
 - The host runs through the checkout's Bun (`scripts/browser/host.ts`), so this
   is for a dev checkout; a packaged app would need to ship the host.
-- One Yarvis instance owns the browser (the one running background workers).
+- Every running Yarvis instance can drive the browser, and two could act in the
+  same tab at once. That is on purpose, for testing branches side by side.
 - Clicks are not asked about on typed turns. That is what makes reading many
   channels practical, and it is a decision to revisit if it feels too loose.
 - `<all_urls>` lets a read reach any tab, including signed-in ones; there is no
