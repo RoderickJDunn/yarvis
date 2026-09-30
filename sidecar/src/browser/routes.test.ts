@@ -41,6 +41,12 @@ describe("browser bridge routes", () => {
     expect(res.status).toBe(403);
   });
 
+  it("answers a ping from the host holding the token", async () => {
+    const { app, auth } = setup();
+    expect((await app.request("/ping", { headers: auth })).status).toBe(204);
+    expect((await app.request("/ping", { headers: host })).status).toBe(401);
+  });
+
   it("refuses a poll that doesn't say which profile it is", async () => {
     const { app, auth } = setup();
     const res = await app.request("/next", { headers: auth });

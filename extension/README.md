@@ -19,7 +19,7 @@ Yarvis sidecar  <--HTTP long poll-->  native host  <--stdio-->  extension
 ```
 
 - The sidecar picks a new port each launch, so on startup each running Yarvis
-  instance writes `~/.yarvis/browser/instances/<instance>.json` (name, port, a
+  instance writes `~/.yarvis/browser/instances/<instance>-<pid>.json` (name, port, a
   scoped token and its pid, mode 0600). The host rescans that folder every few
   seconds and polls every live instance, so restarting Yarvis, or running a
   second one with `bun run dev:instance <name>`, needs nothing on your side.

@@ -33,6 +33,8 @@ interface Poller {
   instance: Instance;
   connected: boolean;
   stopped: boolean;
+  /** Aborts the poll in flight, so a renamed profile is re-announced at once. */
+  inflight: AbortController | null;
 }
 
 /** Keyed by file name, so a restarted instance replaces its old poller. */
@@ -69,28 +71,49 @@ async function post(instance: Instance, message: { id: string }): Promise<void> 
   });
 }
 
+function setConnected(poller: Poller, connected: boolean): void {
+  if (poller.connected === connected) return;
+  poller.connected = connected;
+  reportStatus();
+}
+
 async function poll(poller: Poller): Promise<void> {
   const { instance } = poller;
+  const headers = { Authorization: `Bearer ${instance.token}` };
   while (!poller.stopped) {
     if (!profile) {
       await sleep(250);
       continue;
     }
+    // A long poll answers only when it has a command or its hold runs out, so a
+    // quick ping is what shows the instance as connected straight away.
+    if (!poller.connected) {
+      try {
+        const ping = await fetch(`http://127.0.0.1:${instance.port}/browser/ping`, { headers });
+        setConnected(poller, ping.ok);
+      } catch {
+        setConnected(poller, false);
+      }
+      if (!poller.connected) {
+        await sleep(RETRY_MS);
+        continue;
+      }
+    }
     const query = new URLSearchParams({ profile: profile.id, name: profile.name });
+    const controller = new AbortController();
+    poller.inflight = controller;
     try {
       const res = await fetch(`http://127.0.0.1:${instance.port}/browser/next?${query}`, {
-        headers: { Authorization: `Bearer ${instance.token}` },
+        headers,
+        signal: controller.signal,
       });
       const ok = res.status === 200 || res.status === 204;
-      if (poller.connected !== ok) {
-        poller.connected = ok;
-        reportStatus();
-      }
+      setConnected(poller, ok);
       if (res.status === 200) {
         const item = (await res.json()) as { id: string };
         pending.set(item.id, { instance, at: Date.now() });
         try {
-          send({ type: "command", instance: instance.name, ...item });
+          send({ type: "command", ...item });
         } catch (error) {
           // Say so now rather than leave the tool to wait out its timeout.
           pending.delete(item.id);
@@ -102,11 +125,13 @@ async function poll(poller: Poller): Promise<void> {
         await sleep(RETRY_MS);
       }
     } catch {
-      if (poller.connected) {
-        poller.connected = false;
-        reportStatus();
-      }
+      // Our own abort (a rename) goes straight round; the sidecar requeues any
+      // command it had already handed over.
+      if (controller.signal.aborted) continue;
+      setConnected(poller, false);
       await sleep(RETRY_MS);
+    } finally {
+      poller.inflight = null;
     }
   }
 }
@@ -153,13 +178,14 @@ async function rescan(): Promise<void> {
       continue;
     }
     if (current) current.stopped = true;
-    const poller: Poller = { instance, connected: false, stopped: false };
+    const poller: Poller = { instance, connected: false, stopped: false, inflight: null };
     pollers.set(file, poller);
     void poll(poller);
   }
   for (const [file, poller] of pollers) {
     if (seen.has(file)) continue;
     poller.stopped = true;
+    poller.inflight?.abort();
     pollers.delete(file);
   }
 
@@ -184,7 +210,10 @@ process.stdin.on("data", (chunk: Buffer) => {
     const message = raw as { type?: unknown; id?: unknown; profileId?: unknown; name?: unknown };
     if (message?.type === "hello") {
       if (typeof message.profileId === "string" && typeof message.name === "string") {
+        const changed = profile?.id !== message.profileId || profile?.name !== message.name;
         profile = { id: message.profileId, name: message.name };
+        // A held poll still carries the old name for up to its whole hold.
+        if (changed) for (const poller of pollers.values()) poller.inflight?.abort();
       }
       // A popup opened after the last change still needs the current picture.
       lastStatus = "";

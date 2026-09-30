@@ -15,7 +15,7 @@ function render(status) {
   }
   const instances = status.instances ?? [];
   host.textContent =
-    instances.length === 0 ? "No Yarvis app is running." : `Yarvis apps this browser can talk to:`;
+    instances.length === 0 ? "No Yarvis app is running." : "Yarvis apps this browser can talk to:";
   for (const instance of instances) {
     const item = document.createElement("li");
     const dot = document.createElement("span");

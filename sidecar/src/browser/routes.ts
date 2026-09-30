@@ -16,7 +16,8 @@ const MAX_RESULT_BYTES = 2_000_000;
 
 /**
  * How a Chrome profile identifies itself. The name is what the user typed in the
- * extension and what a model passes back, so it is kept short and printable.
+ * extension and what a model passes back, so it is kept short and printable —
+ * the same cleaning `extension/profile.js` applies when it is saved.
  */
 const profileSchema = z.object({
   id: z.string().regex(/^[A-Za-z0-9-]{1,64}$/),
@@ -59,6 +60,9 @@ export function createBrowserRoutes(
   });
 
   router.use("*", bearerAuth({ token: bridge.token }));
+
+  // Lets the host show an instance as connected without waiting out a long poll.
+  router.get("/ping", (c) => c.body(null, 204));
 
   // Long poll: answers with the next command, or 204 once the hold expires.
   router.get("/next", async (c) => {

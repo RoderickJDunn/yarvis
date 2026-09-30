@@ -2,8 +2,9 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 /**
- * The discovery files each running Yarvis sidecar writes, one per instance (see
- * `sidecar/src/browser/discovery.ts`, which writes them).
+ * The discovery files each running Yarvis sidecar writes, one per process.
+ * `sidecar/src/browser/discovery.ts` writes them; the folder and the fields here
+ * must match it.
  */
 
 export interface Instance {

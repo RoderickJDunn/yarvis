@@ -453,7 +453,8 @@ chrome.declarativeNetRequest.getSessionRules().then((rules) =>
   }),
 );
 
-// A rename in the popup reaches the host straight away.
+// A rename in the popup reaches the host, which re-polls every instance under
+// the new name.
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && changes[PROFILE_KEY]) sayHello();
 });
