@@ -172,6 +172,11 @@ describe("click", () => {
     expect(page().click({ selector: "#reset", ...screens }).error).toContain("submits or resets");
   });
 
+  it("refuses a click inside a toggle widget", () => {
+    document.body.innerHTML = `<div role="switch"><span id="in-switch" role="button">Notifications</span></div>`;
+    expect(page().click({ selector: "#in-switch", ...screens }).error).toContain("form control");
+  });
+
   it("refuses an editable area", () => {
     document.body.innerHTML = `<div id="composer" contenteditable="plaintext-only" aria-label="Message">hi</div>`;
     const composer = document.getElementById("composer") as HTMLElement;

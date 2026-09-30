@@ -429,9 +429,10 @@
       if (node === stop) break;
     }
     // Past the chosen element's own control, only what a click activates by
-    // itself: a whole [onclick] sidebar above a row shouldn't refuse the row.
+    // itself, plus toggle widgets, which act on a click bubbling up from inside
+    // them. A whole [onclick] sidebar above a row shouldn't refuse the row.
     for (let node = stop.parentElement; node; node = node.parentElement) {
-      if (node.matches(ACTIVATES)) reached.add(node);
+      if (node.matches(`${ACTIVATES},${FORM_CONTROL}`)) reached.add(node);
     }
     for (const node of reached) {
       const why = refusal(node, screens);
