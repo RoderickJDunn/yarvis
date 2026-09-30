@@ -112,7 +112,7 @@ describe("click", () => {
   });
 
   it("reports a bad selector and one that matches nothing", () => {
-    expect(page().click({ selector: "[[", ...screens }).error).toContain("isn't valid CSS");
+    expect(page().click({ selector: "a >>> b", ...screens }).error).toContain("isn't valid CSS");
     expect(page().click({ selector: "#missing", ...screens }).error).toContain(
       "Nothing on the page",
     );
@@ -156,6 +156,55 @@ describe("click", () => {
       page().inspect({ selector: '[data-qa="row"]', limit: 5, ...screens }).error,
     ).toBeUndefined();
     document.head.innerHTML = "";
+  });
+
+  it("screens what a click activates above the chosen element", () => {
+    document.body.innerHTML = `
+      <a href="/logout"><span id="in-link" role="button">Profile</span></a>
+      <label for="chk"><div id="in-label" role="button">Notify</div></label><input id="chk" type="checkbox" />
+      <form><button><span id="in-submit" role="button">Go</span></button></form>
+      <form><button type="reset" id="reset">Start over</button></form>`;
+    expect(page().click({ selector: "#in-link", ...screens }).error).toContain("changes something");
+    expect(page().click({ selector: "#in-label", ...screens }).error).toContain("form control");
+    expect(page().click({ selector: "#in-submit", ...screens }).error).toContain(
+      "submits or resets",
+    );
+    expect(page().click({ selector: "#reset", ...screens }).error).toContain("submits or resets");
+  });
+
+  it("refuses an editable area", () => {
+    document.body.innerHTML = `<div id="composer" contenteditable="plaintext-only" aria-label="Message">hi</div>`;
+    const composer = document.getElementById("composer") as HTMLElement;
+    Object.defineProperty(composer, "isContentEditable", { value: true });
+    expect(page().click({ selector: "#composer", ...screens }).error).toContain("form control");
+  });
+
+  it("refuses every way of spelling a probe on a hidden attribute", () => {
+    for (const selector of [
+      "[*|content^=a]",
+      "[|content^=a]",
+      "[\\63 ontent^=a]",
+      "[content/**/^=a]",
+      'html:has(meta[*|content^="a"])',
+      "[content ^= a]",
+      "[CONTENT^=a]",
+      "[content^=a",
+    ]) {
+      expect(page().inspect({ selector, limit: 5, ...screens }).error).toBeDefined();
+    }
+  });
+
+  it("allows plain attribute tests, including brackets inside a quoted value", () => {
+    document.body.innerHTML = `<button aria-label="a]b" data-qa="x">Threads</button>`;
+    for (const selector of [
+      '[aria-label="a]b"]',
+      "[data-qa=x]",
+      "[href]",
+      "button[role]",
+      '[role="button" i]',
+    ]) {
+      expect(page().inspect({ selector, limit: 5, ...screens }).error).toBeUndefined();
+    }
   });
 
   it("only hovers in hover mode", () => {

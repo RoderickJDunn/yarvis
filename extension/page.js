@@ -33,7 +33,23 @@
    */
   const MATCHABLE_ATTRIBUTE =
     /^(?:role|id|class|type|title|tabindex|aria-[\w-]+|data-qa[\w-]*|data-testid)$/i;
-  const ATTRIBUTE_PREDICATE = /\[\s*([^\s~|^$*=\]]+)\s*[~|^$*]?=/g;
+
+  /**
+   * The only shape an attribute test may take: a plain name, optionally compared
+   * to a quoted or bare value. Namespaces (`[*|content]`), escapes and comments
+   * are all ways to spell a name the check above wouldn't recognise, so a
+   * bracket that isn't exactly this is refused rather than let through.
+   */
+  const ATTRIBUTE_GROUP =
+    /^\s*([A-Za-z][\w-]*)\s*(?:[~|^$*]?=\s*(?:"[^"\\]*"|'[^'\\]*'|[\w-]+)\s*[iIsS]?\s*)?$/;
+  const HAS_OPERATOR = /[~|^$*]?=/;
+
+  /**
+   * Elements a click activates even when it lands on something inside them: a
+   * link follows, a button presses or submits, a label forwards to its control.
+   * Any of these above the chosen element is screened too.
+   */
+  const ACTIVATES = "a[href],button,label,summary,input,select,textarea";
 
   /** Never shown by inspect: they hold code and boot data, not anything to click. */
   const UNINSPECTABLE = new Set([
@@ -116,7 +132,8 @@
     }
   }
 
-  const isSubmit = (el) => el.tagName === "BUTTON" && el.form && el.type === "submit";
+  const isSubmit = (el) =>
+    el.tagName === "BUTTON" && el.form && (el.type === "submit" || el.type === "reset");
 
   /**
    * Why an element may not be offered or clicked, or null if it may. A same-site
@@ -125,8 +142,12 @@
    */
   function refusal(el, rules, { needsLabel = true } = {}) {
     if (el.disabled) return "That control is disabled.";
-    if (isSubmit(el)) return "That control submits a form, so Yarvis won't click it.";
-    if (el.matches(FORM_CONTROL) || (el.tagName === "LABEL" && el.control)) {
+    if (isSubmit(el)) return "That control submits or resets a form, so Yarvis won't click it.";
+    if (
+      el.matches(FORM_CONTROL) ||
+      el.isContentEditable ||
+      (el.tagName === "LABEL" && el.control)
+    ) {
       return "That is a form control; Yarvis doesn't change settings or fill in forms.";
     }
     if (el.tagName === "A" && el.hasAttribute("download")) {
@@ -154,15 +175,49 @@
     };
   }
 
-  /** querySelectorAll that reports a bad or disallowed selector as an error the agent can fix. */
-  function select(selector, root = document) {
-    for (const [, name] of selector.matchAll(ATTRIBUTE_PREDICATE)) {
-      if (!MATCHABLE_ATTRIBUTE.test(name)) {
-        return {
-          error: `Selectors can match attribute values only on role, id, class, type, title, tabindex, aria-* and data-qa/data-testid, not ${name}. [${name}] on its own is fine.`,
-        };
+  /**
+   * Why a selector's attribute tests aren't allowed, or null. Every [...] group
+   * is read out, skipping brackets inside quoted strings, and each must parse as
+   * a plain attribute test; one that compares a value must be on an attribute
+   * whose value isn't something inspect keeps back.
+   */
+  function attributeRefusal(selector) {
+    const allowed =
+      "Selectors can match attribute values only on role, id, class, type, title, tabindex, aria-* and data-qa/data-testid";
+    if (selector.includes("\\") || selector.includes("/*")) {
+      return "Selectors can't contain escapes or comments.";
+    }
+    let quote = null;
+    let start = -1;
+    for (let i = 0; i < selector.length; i++) {
+      const ch = selector[i];
+      if (quote) {
+        if (ch === quote) quote = null;
+      } else if (ch === '"' || ch === "'") {
+        quote = ch;
+      } else if (ch === "[") {
+        if (start !== -1) return "That selector's brackets don't balance.";
+        start = i;
+      } else if (ch === "]") {
+        if (start === -1) return "That selector's brackets don't balance.";
+        const group = selector.slice(start + 1, i);
+        start = -1;
+        const parsed = group.match(ATTRIBUTE_GROUP);
+        if (!parsed)
+          return `${allowed}, written plainly like [role="button"]; can't use [${group}].`;
+        if (HAS_OPERATOR.test(group) && !MATCHABLE_ATTRIBUTE.test(parsed[1])) {
+          return `${allowed}, not ${parsed[1]}. [${parsed[1]}] on its own is fine.`;
+        }
       }
     }
+    if (quote || start !== -1) return "That selector's quotes or brackets don't balance.";
+    return null;
+  }
+
+  /** querySelectorAll that reports a bad or disallowed selector as an error the agent can fix. */
+  function select(selector, root = document) {
+    const refused = attributeRefusal(selector);
+    if (refused) return { error: refused };
     try {
       return { nodes: [...root.querySelectorAll(selector)] };
     } catch (error) {
@@ -372,6 +427,11 @@
     for (let node = target; node; node = node.parentElement) {
       if (node.matches(CONTROL)) reached.add(node);
       if (node === stop) break;
+    }
+    // Past the chosen element's own control, only what a click activates by
+    // itself: a whole [onclick] sidebar above a row shouldn't refuse the row.
+    for (let node = stop.parentElement; node; node = node.parentElement) {
+      if (node.matches(ACTIVATES)) reached.add(node);
     }
     for (const node of reached) {
       const why = refusal(node, screens);
