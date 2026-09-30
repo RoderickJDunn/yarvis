@@ -405,68 +405,96 @@ function clickElement(ref, blockedSource, blockedPathSource) {
   if (!el || !el.isConnected) {
     return { error: "That element is gone. List the page's elements again." };
   }
+  // Must match the selector extractElements lists by. The ref map also holds
+  // scrollable panels, and a click at the middle of a message pane would land
+  // on whatever message happens to be there.
+  const clickable =
+    'a[href],button,summary,[role="button"],[role="link"],[role="tab"],[role="treeitem"],[role="menuitem"],[role="option"]';
+  if (!el.matches(clickable)) {
+    return {
+      error: "That ref is a scrollable panel, not something to click. Use scroll_browser_page.",
+    };
+  }
+  const blocked = new RegExp(blockedSource, "i");
   const labelOf = (node) =>
     (node.getAttribute("aria-label") || node.innerText || node.title || "")
       .replace(/\s+/g, " ")
       .trim();
+  // A same-site link to a page moves around rather than acting, so it is judged
+  // by its address instead of its label.
+  const linkTarget = (node) => {
+    if (node.tagName !== "A") return null;
+    const raw = node.getAttribute("href");
+    if (!raw || raw.startsWith("#")) return null;
+    try {
+      const url = new URL(node.href);
+      return url.origin === location.origin ? url : null;
+    } catch {
+      return null;
+    }
+  };
 
   // Click where a person would: the element under the middle of it. Apps like
   // Slack put the handler on something inside a sidebar row, and an event sent
   // to the row itself only bubbles up, never down to it. If something else is
   // covering that point, the listed element takes the click instead.
-  el.scrollIntoView({ block: "center" });
+  el.scrollIntoView({ block: "center", behavior: "instant" });
   const rect = el.getBoundingClientRect();
   const x = rect.left + rect.width / 2;
   const y = rect.top + rect.height / 2;
   const hit = document.elementFromPoint(x, y);
   const target = hit && el.contains(hit) ? hit : el;
 
-  // The checks below are on what is really clicked, which can be a control
-  // nested in the row (a "leave channel" button) rather than the row itself.
-  const control =
-    target.closest(
-      'a,button,summary,[role="button"],[role="link"],[role="tab"],[role="treeitem"],[role="menuitem"],[role="option"]',
-    ) ?? el;
-  const label = `${labelOf(el)} ${control === el ? "" : labelOf(control)}`.trim();
-  const anchor = target.closest("a[href]");
-  const rawHref = anchor?.getAttribute("href");
-  const navigates =
-    Boolean(rawHref) &&
-    !rawHref.startsWith("#") &&
-    (() => {
-      try {
-        return new URL(anchor.href).origin === location.origin;
-      } catch {
-        return false;
+  // What is really clicked can be a control nested in the row rather than the
+  // row itself. The listed element passed extractElements' screens; a nested
+  // control has to pass the same ones here, and an unlabelled one (an icon-only
+  // delete button) is refused rather than trusted.
+  const control = target.closest(clickable);
+  const nested = control && control !== el && el.contains(control) ? control : null;
+  for (const node of nested ? [el, nested] : [el]) {
+    if (node.disabled) return { error: "That control is disabled." };
+    if (node.type === "submit" && (node.tagName === "INPUT" || node.form)) {
+      return { error: "That control submits a form, so Yarvis won't click it." };
+    }
+    const link = linkTarget(node);
+    if (link) {
+      if (new RegExp(blockedPathSource, "i").test(link.pathname + link.search)) {
+        return { error: "That link changes something on the site, so Yarvis won't open it." };
       }
-    })();
-  if (!navigates && new RegExp(blockedSource, "i").test(label)) {
-    return { error: "That control changes or sends something, so Yarvis won't click it." };
-  }
-  if (navigates) {
-    const url = new URL(anchor.href);
-    if (new RegExp(blockedPathSource, "i").test(url.pathname + url.search)) {
-      return { error: "That link changes something on the site, so Yarvis won't open it." };
+      continue;
+    }
+    const label = labelOf(node);
+    if (!label && node === nested) {
+      return {
+        error:
+          "Something without a label sits where that would be clicked, so Yarvis won't click it.",
+      };
+    }
+    if (blocked.test(label)) {
+      return { error: "That control changes or sends something, so Yarvis won't click it." };
     }
   }
+
+  const anchor = target.closest("a[href]");
   if (anchor) {
-    let target;
+    let url;
     try {
-      target = new URL(anchor.href);
+      url = new URL(anchor.href);
     } catch {
       return { error: "That link has no usable address." };
     }
-    if (target.origin !== location.origin) {
+    if (url.origin !== location.origin) {
       return { error: "That link leaves this site. Yarvis stays on the current site." };
     }
     if (anchor.target && anchor.target !== "_self") {
       return { error: "That link opens a new tab. Yarvis works in the current tab only." };
     }
   }
-  // The whole sequence a real click produces; some apps act on pointerdown or
-  // mousedown and never look at the click.
-  const at = {
-    bubbles: true,
+
+  // The sequence a real mouse click produces; some apps act on pointerdown or
+  // mousedown and never look at the click. The pointer is also moved off
+  // afterwards, so no hover state is left behind to reveal buttons on the row.
+  const base = {
     cancelable: true,
     composed: true,
     clientX: x,
@@ -474,19 +502,29 @@ function clickElement(ref, blockedSource, blockedPathSource) {
     button: 0,
     view: window,
   };
-  for (const type of ["pointerover", "pointerenter", "mouseover", "pointerdown", "mousedown"]) {
-    const Event = type.startsWith("pointer") ? PointerEvent : MouseEvent;
-    target.dispatchEvent(
-      new Event(type, { ...at, pointerId: 1, pointerType: "mouse", isPrimary: true, buttons: 1 }),
-    );
-  }
-  if (typeof target.focus === "function") target.focus({ preventScroll: true });
-  for (const type of ["pointerup", "mouseup", "click"]) {
-    const Event = type.startsWith("pointer") ? PointerEvent : MouseEvent;
-    target.dispatchEvent(
-      new Event(type, { ...at, pointerId: 1, pointerType: "mouse", isPrimary: true }),
-    );
-  }
+  const pointer = { pointerId: 1, pointerType: "mouse", isPrimary: true };
+  const fire = (type, init) => {
+    const Kind = type.startsWith("pointer") ? PointerEvent : MouseEvent;
+    const event = new Kind(type, { ...base, ...pointer, bubbles: true, ...init });
+    target.dispatchEvent(event);
+    return event;
+  };
+  fire("pointerover", { buttons: 0 });
+  fire("pointerenter", { buttons: 0, bubbles: false });
+  fire("mouseover", { buttons: 0 });
+  fire("mouseenter", { buttons: 0, bubbles: false });
+  fire("pointerdown", { buttons: 1, detail: 1 });
+  const down = fire("mousedown", { buttons: 1, detail: 1 });
+  // The browser focuses the nearest focusable element unless mousedown was cancelled.
+  const focusable = target.closest("a[href],button,[tabindex],summary,input,select,textarea");
+  if (!down.defaultPrevented && focusable) focusable.focus({ preventScroll: true });
+  fire("pointerup", { buttons: 0, detail: 1 });
+  fire("mouseup", { buttons: 0, detail: 1 });
+  fire("click", { buttons: 0, detail: 1 });
+  fire("pointerout", { buttons: 0 });
+  fire("pointerleave", { buttons: 0, bubbles: false });
+  fire("mouseout", { buttons: 0 });
+  fire("mouseleave", { buttons: 0, bubbles: false });
   return { ok: true };
 }
 

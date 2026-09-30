@@ -23,7 +23,7 @@ export function sameOrigin(a, b) {
  * guarantee, which is why the tools also ask for approval on a spoken turn.
  */
 export const BLOCKED_LABEL_SOURCE =
-  "\\b(?:delete|remove|leave|archive|deactivate|sign ?out|log ?out|send|post|reply|submit|publish|pay|purchase|buy|confirm|unsubscribe|block|report|mute|kick|invite|save|edit|share|react|upload|approve|accept|decline|join|add|create|resolve|discard|trash|dismiss|revoke|disable|authorize|install|snooze|forward|apply|continue)(?:s|es|d|ed|ing)?\\b";
+  "\\b(?:delete|remove|leave|archive|deactivate|sign ?out|log ?out|send|post|reply|submit|publish|pay|purchase|buy|confirm|unsubscribe|block|report|mute|kick|invite|save|edit|share|react|upload|approve|accept|decline|join|add|create|resolve|discard|trash|dismiss|revoke|disable|authorize|install|snooze|forward|apply|continue|call|pin|star|start (?:a )?huddle)(?:s|es|d|ed|ing)?\\b";
 
 /**
  * The same screen for a link's address. A same-site GET such as /logout or

@@ -54,7 +54,15 @@ describe("isBlockedLabel", () => {
   });
 
   it("lets navigation labels through", () => {
-    for (const label of ["general", "Threads", "Direct messages", "3 replies", "Home"]) {
+    for (const label of [
+      "general",
+      "Threads",
+      "Direct messages",
+      "3 replies",
+      "Home",
+      "Starred",
+      "Huddles",
+    ]) {
       expect(isBlockedLabel(label)).toBe(false);
     }
   });
