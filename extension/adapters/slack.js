@@ -21,10 +21,17 @@
   const BODY = ['[data-qa="message-text"]', ".c-message_kit__blocks", ".p-rich_text_block"];
   const REPLIES = ['[data-qa="reply_bar_count"]', ".c-message__reply_count"];
   const HEADER = ['[data-qa="channel_name"]', ".p-view_header__channel_title"];
+  /**
+   * The conversation's own pane. Without it, an open thread or side panel adds
+   * its messages to the transcript as if they were in the channel.
+   */
+  const MAIN_PANE = [".p-workspace__primary_view", '[role="main"]'];
+  const SIDE_PANE = '.p-flexpane, .p-threads_flexpane, [data-qa="threads_flexpane"]';
 
   /** Slack conversation ids: C channels, D direct messages, G group DMs. */
   const CONVERSATION_ID = /^[CDG][A-Z0-9]{6,}$/;
-  const ID_IN_ADDRESS = /\/(?:archives|client\/T[A-Z0-9]+)\/([CDG][A-Z0-9]{6,})/;
+  // T for a workspace, E for an Enterprise Grid org.
+  const ID_IN_ADDRESS = /\/(?:archives|client\/[TE][A-Z0-9]+)\/([CDG][A-Z0-9]{6,})/;
 
   const clean = (text) => (text ?? "").replace(/\s+/g, " ").trim();
   const text = (el) => clean(el?.innerText ?? el?.textContent);
@@ -60,15 +67,22 @@
 
   /**
    * The loaded messages as "[time] author: text" lines, oldest first, or null
-   * when none are found. Slack leaves the sender off a run of messages from the
-   * same person, so the last one seen carries over.
+   * when none are found. When they don't all fit in maxChars the oldest are
+   * dropped: what's happening now is what a reader of a chat wants. Slack leaves
+   * the sender off a run of messages from the same person, so the last one seen
+   * carries over, within one list only.
    */
-  function readPage() {
-    const messages = all(document, MESSAGE);
+  function readPage({ maxChars }) {
+    const pane = first(document, MAIN_PANE);
+    const messages = all(pane ?? document, MESSAGE).filter((m) => !m.closest(SIDE_PANE));
     if (messages.length === 0) return null;
     const lines = [];
     let author = "";
+    let list = null;
     for (const message of messages) {
+      const container = message.closest('[role="list"]');
+      if (container !== list) author = "";
+      list = container;
       author = text(first(message, SENDER)) || author;
       const body = text(first(message, BODY));
       if (!body) continue;
@@ -79,12 +93,21 @@
       );
     }
     if (lines.length === 0) return null;
-    const header = [
-      `Conversation: ${conversationName()}`,
-      "Only the messages Slack has loaded are here; scroll the message list up for older ones.",
-      "",
-    ];
-    return { text: [...header, ...lines].join("\n") };
+
+    const header = `Conversation: ${conversationName()}\n`;
+    const kept = [];
+    let used = header.length;
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i];
+      if (used + line.length + 1 > maxChars) break;
+      kept.unshift(line);
+      used += line.length + 1;
+    }
+    const truncated = kept.length < lines.length;
+    const note = truncated
+      ? `Older loaded messages were left out to fit; ${lines.length - kept.length} more above.\n`
+      : "Only the messages Slack has loaded are here; scroll the message list up for older ones.\n";
+    return { text: `${header}${note}\n${kept.join("\n")}`, truncated };
   }
 
   /** The conversation a sidebar row opens, from an attribute on it or a link inside it. */
@@ -104,7 +127,7 @@
   function describeElement(el, loc = location) {
     const id = conversationIdOf(el);
     if (!id) return null;
-    const team = loc.pathname.match(/^\/client\/(T[A-Z0-9]+)/)?.[1];
+    const team = loc.pathname.match(/^\/client\/([TE][A-Z0-9]+)/)?.[1];
     return {
       channelId: id,
       // Loading this opens the conversation even when its sidebar row isn't rendered.
@@ -112,8 +135,13 @@
     };
   }
 
-  const matches = (loc) => loc.hostname === "app.slack.com" || loc.hostname.endsWith(".slack.com");
+  // The app and a workspace's conversation pages, not api.slack.com or the help centre.
+  const matches = (loc) =>
+    loc.hostname === "app.slack.com" ||
+    (loc.hostname.endsWith(".slack.com") && /^\/(?:client|archives)\//.test(loc.pathname));
 
-  globalThis.__yarvisAdapters ??= {};
+  // Own property only, like page.js reads it: a page element with this id would
+  // otherwise show up on window as a named property and be written into.
+  if (!Object.hasOwn(globalThis, "__yarvisAdapters")) globalThis.__yarvisAdapters = {};
   globalThis.__yarvisAdapters.slack = { name: "slack", matches, readPage, describeElement };
 })();

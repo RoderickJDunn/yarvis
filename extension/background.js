@@ -233,7 +233,9 @@ async function scroll(tabId, ref, direction) {
 
 async function click({ tabId, ref, selector, index, mode, waitMs }) {
   const target = tabId ?? (await activeTabId());
-  const settle = Math.min(Math.max(waitMs ?? SETTLE_MS, 0), MAX_WAIT_MS);
+  // waitMs only ever adds time: the navigation lock is held for the settle, and
+  // a shorter one would let a delayed navigation start after the lock is gone.
+  const settle = Math.min(Math.max(waitMs ?? SETTLE_MS, SETTLE_MS), MAX_WAIT_MS);
   const before = await chrome.tabs.get(target);
 
   // A click can open a new tab (target=_blank, window.open). Close any that
@@ -253,7 +255,8 @@ async function click({ tabId, ref, selector, index, mode, waitMs }) {
       // reports back. The checks below still have to run.
       injectionError = error;
     }
-    await sleep(settle);
+    // A click refused in the page did nothing, so there is nothing to wait for.
+    if (!result?.error) await sleep(settle);
   });
   chrome.tabs.onCreated.removeListener(onCreated);
   for (const id of opened) await chrome.tabs.remove(id).catch(() => {});

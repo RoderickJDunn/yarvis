@@ -305,7 +305,7 @@ export function buildBrowserTools(bridge: BrowserBridge = browserBridge) {
             .int()
             .min(0)
             .optional()
-            .describe("Which match of selector to click, from 0 (default 0)"),
+            .describe("Which match of selector to click, from 0 (default 0). Ignored with ref."),
           mode: z
             .enum(["center", "direct", "hover"])
             .default("center")
@@ -318,7 +318,9 @@ export function buildBrowserTools(bridge: BrowserBridge = browserBridge) {
             .min(0)
             .max(5000)
             .optional()
-            .describe("How long to let the page react before reporting (default 900)"),
+            .describe(
+              "How long to let the page react before reporting, for slow pages (at least 900, the default)",
+            ),
         })
         .refine((input) => (input.ref === undefined) !== (input.selector === undefined), {
           message: "give either ref or selector",

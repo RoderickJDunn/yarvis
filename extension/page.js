@@ -15,6 +15,38 @@
   const CLICKABLE =
     'a[href],button,summary,[role="button"],[role="link"],[role="tab"],[role="treeitem"],[role="menuitem"],[role="option"]';
 
+  /**
+   * Controls that change a setting or fill in a form. A synthetic click still
+   * toggles a checkbox or submits a form, so these are never clicked, and neither
+   * is a label that forwards its click to one.
+   */
+  const FORM_CONTROL =
+    'input:not([type="button"]),select,textarea,[contenteditable="true"],[contenteditable=""],[role="checkbox"],[role="switch"],[role="radio"],[role="menuitemcheckbox"],[role="menuitemradio"],[role="textbox"]';
+
+  /** Anything a click can activate on its way up, all of which gets screened. */
+  const CONTROL = `${CLICKABLE},label,[onclick],${FORM_CONTROL}`;
+
+  /**
+   * Attributes a selector may match on by value. Anything else could be probed a
+   * prefix at a time — `[content^="a"]` on a CSRF meta tag — for a value inspect
+   * deliberately never returns.
+   */
+  const MATCHABLE_ATTRIBUTE =
+    /^(?:role|id|class|type|title|tabindex|aria-[\w-]+|data-qa[\w-]*|data-testid)$/i;
+  const ATTRIBUTE_PREDICATE = /\[\s*([^\s~|^$*=\]]+)\s*[~|^$*]?=/g;
+
+  /** Never shown by inspect: they hold code and boot data, not anything to click. */
+  const UNINSPECTABLE = new Set([
+    "SCRIPT",
+    "STYLE",
+    "TEMPLATE",
+    "NOSCRIPT",
+    "META",
+    "LINK",
+    "HEAD",
+    "TITLE",
+  ]);
+
   /** Longest label kept per element in a listing. */
   const LABEL_CHARS = 120;
 
@@ -31,22 +63,34 @@
   }
   const state = window.__yarvisRefs;
 
+  // The counter keeps climbing, so a ref from an older listing reads as gone
+  // rather than quietly naming a different element.
   function resetRefs() {
     state.byRef = new Map();
     state.scrollRefs = new Set();
-    state.next = 1;
   }
 
   function remember(el, { scroll = false } = {}) {
-    for (const [ref, known] of state.byRef) if (known === el) return ref;
+    for (const [ref, known] of state.byRef) {
+      if (known !== el) continue;
+      if (scroll) state.scrollRefs.add(ref);
+      return ref;
+    }
     const ref = state.next++;
     state.byRef.set(ref, el);
     if (scroll) state.scrollRefs.add(ref);
     return ref;
   }
 
+  // Own property only: a page element with id="__yarvisAdapters" shows up on
+  // window as a named property, and must not stand in for the registry.
   function adapter() {
-    return Object.values(globalThis.__yarvisAdapters ?? {}).find((a) => a.matches(location));
+    const registry = Object.hasOwn(globalThis, "__yarvisAdapters")
+      ? globalThis.__yarvisAdapters
+      : {};
+    return Object.values(registry).find(
+      (a) => typeof a?.matches === "function" && a.matches(location),
+    );
   }
 
   const clean = (text) => (text ?? "").replace(/\s+/g, " ").trim();
@@ -72,9 +116,7 @@
     }
   }
 
-  const isSubmit = (el) =>
-    (el.tagName === "INPUT" && el.type === "submit") ||
-    (el.tagName === "BUTTON" && el.form && el.type === "submit");
+  const isSubmit = (el) => el.tagName === "BUTTON" && el.form && el.type === "submit";
 
   /**
    * Why an element may not be offered or clicked, or null if it may. A same-site
@@ -84,6 +126,12 @@
   function refusal(el, rules, { needsLabel = true } = {}) {
     if (el.disabled) return "That control is disabled.";
     if (isSubmit(el)) return "That control submits a form, so Yarvis won't click it.";
+    if (el.matches(FORM_CONTROL) || (el.tagName === "LABEL" && el.control)) {
+      return "That is a form control; Yarvis doesn't change settings or fill in forms.";
+    }
+    if (el.tagName === "A" && el.hasAttribute("download")) {
+      return "That link downloads a file, so Yarvis won't open it.";
+    }
     const link = sameSiteLink(el);
     if (link) {
       return rules.blockedPath.test(link.pathname + link.search)
@@ -106,8 +154,15 @@
     };
   }
 
-  /** querySelectorAll that reports a bad selector as an error the agent can fix. */
+  /** querySelectorAll that reports a bad or disallowed selector as an error the agent can fix. */
   function select(selector, root = document) {
+    for (const [, name] of selector.matchAll(ATTRIBUTE_PREDICATE)) {
+      if (!MATCHABLE_ATTRIBUTE.test(name)) {
+        return {
+          error: `Selectors can match attribute values only on role, id, class, type, title, tabindex, aria-* and data-qa/data-testid, not ${name}. [${name}] on its own is fine.`,
+        };
+      }
+    }
     try {
       return { nodes: [...root.querySelectorAll(selector)] };
     } catch (error) {
@@ -125,18 +180,14 @@
     let adapterNote;
     if (site?.readPage) {
       try {
-        const read = site.readPage();
-        if (read) {
-          return {
-            ...base,
-            adapter: site.name,
-            text: read.text.slice(0, maxChars),
-            truncated: read.text.length > maxChars,
-          };
-        }
+        // The adapter fits its own text to maxChars, since only it knows which
+        // end matters (for a chat, the newest messages).
+        const read = site.readPage({ maxChars });
+        if (read)
+          return { ...base, adapter: site.name, text: read.text, truncated: read.truncated };
         adapterNote = `The ${site.name} reader found nothing it recognises here, so this is the plain page text.`;
       } catch (error) {
-        adapterNote = `The ${site.name} reader failed (${error.message}), so this is the plain page text.`;
+        adapterNote = `The ${site.name} reader failed (${String(error?.message).slice(0, 120)}), so this is the plain page text.`;
       }
     }
     const text = document.body?.innerText ?? "";
@@ -226,25 +277,22 @@
     };
   }
 
-  /** Attributes worth showing when working out how a page is built. No values that carry data (value, src, content). */
+  /**
+   * Attributes worth showing when working out how a page is built: names, roles,
+   * labels, test hooks and ids. Not values that carry data (value, src, content)
+   * or arbitrary data-* attributes, which on many sites hold signed URLs and
+   * tokens.
+   */
+  const SHOWN_ATTRIBUTE =
+    /^(?:id|class|role|type|name|title|tabindex|href|aria-[\w-]+|data-qa[\w-]*|data-testid|data-[\w-]*-id)$/i;
+
   function attributesOf(el) {
     const out = {};
     for (const { name, value } of el.attributes) {
-      const keep =
-        name === "id" ||
-        name === "class" ||
-        name === "role" ||
-        name === "type" ||
-        name === "name" ||
-        name === "title" ||
-        name === "tabindex" ||
-        name === "href" ||
-        name.startsWith("aria-") ||
-        name.startsWith("data-");
-      if (!keep) continue;
-      // Query strings and fragments carry tokens; the path is enough to tell links apart.
-      const shown = name === "href" ? value.replace(/[?#].*$/, "") : value;
-      out[name] = shown.slice(0, 200);
+      if (!SHOWN_ATTRIBUTE.test(name)) continue;
+      // Query strings and fragments carry tokens; the path is enough to tell addresses apart.
+      const looksLikeAddress = name === "href" || /^(?:https?:)?\/\//i.test(value);
+      out[name] = (looksLikeAddress ? value.replace(/[?#].*$/, "") : value).slice(0, 200);
     }
     return out;
   }
@@ -257,16 +305,23 @@
     const screens = rulesFrom(rules);
     const found = select(selector);
     if (found.error) return { error: found.error };
-    const matches = found.nodes.slice(0, limit).map((el) => {
+    const inspectable = found.nodes.filter(
+      (el) => !UNINSPECTABLE.has(el.tagName) && document.body?.contains(el),
+    );
+    const matches = inspectable.slice(0, limit).map((el) => {
       const rect = el.getBoundingClientRect();
       const control = el.closest(CLICKABLE);
-      const why = refusal(control ?? el, screens, { needsLabel: false });
+      const shown = visible(el);
+      // The same checks click() runs, without the hit test (which needs the
+      // element scrolled into view), so "refused" means a click would be.
+      const screened = screenClick(el, el, screens);
       return {
         ref: remember(el),
         tag: el.tagName.toLowerCase(),
         attributes: attributesOf(el),
-        text: clean(el.innerText).slice(0, 200),
-        visible: visible(el),
+        // innerText of something not rendered is its raw text, hidden content included.
+        text: shown ? clean(el.innerText).slice(0, 200) : "",
+        visible: shown,
         rect: {
           x: Math.round(rect.x),
           y: Math.round(rect.y),
@@ -274,7 +329,7 @@
           height: Math.round(rect.height),
         },
         clickable: Boolean(control),
-        ...(why ? { refused: why } : {}),
+        ...(screened.error ? { refused: screened.error } : {}),
         children: [...el.children].slice(0, 10).map((child) => {
           const role = child.getAttribute("role");
           const qa = child.getAttribute("data-qa");
@@ -288,9 +343,60 @@
     return {
       url: location.href,
       title: document.title,
-      count: found.nodes.length,
+      count: inspectable.length,
       matches,
     };
+  }
+
+  /**
+   * Whether a click on `el` that lands on `target` may go ahead. Everything the
+   * click can activate on its way up is screened: the target, each control
+   * between it and the chosen element's own control, and that control — so an
+   * icon-only delete button in a row, or a label that toggles a checkbox, is
+   * refused rather than trusted. inspect() runs the same checks to report why a
+   * click would be refused.
+   */
+  function screenClick(el, target, screens) {
+    if (!visible(el)) return { error: "That element isn't visible, so Yarvis won't click it." };
+    // Any kind of control counts here, labels included: a span inside a
+    // <label> passes its click on to the label's checkbox.
+    const ownControl = el.closest(CONTROL);
+    if (!ownControl && labelOf(el).length > MAX_PLAIN_LABEL) {
+      return {
+        error:
+          "That element holds too much to click safely (it looks like a container). Inspect it and pick something smaller inside it.",
+      };
+    }
+    const stop = ownControl ?? el;
+    const reached = new Set([el, stop]);
+    for (let node = target; node; node = node.parentElement) {
+      if (node.matches(CONTROL)) reached.add(node);
+      if (node === stop) break;
+    }
+    for (const node of reached) {
+      const why = refusal(node, screens);
+      if (why) return { error: why };
+    }
+
+    const anchor = target.closest("a[href]");
+    if (anchor) {
+      let url;
+      try {
+        url = new URL(anchor.href);
+      } catch {
+        return { error: "That link has no usable address." };
+      }
+      if (url.origin !== location.origin) {
+        return { error: "That link leaves this site. Yarvis stays on the current site." };
+      }
+      if (anchor.target && anchor.target !== "_self") {
+        return { error: "That link opens a new tab. Yarvis works in the current tab only." };
+      }
+      if (anchor.hasAttribute("download")) {
+        return { error: "That link downloads a file, so Yarvis won't open it." };
+      }
+    }
+    return {};
   }
 
   function resolve({ ref, selector, index = 0 }) {
@@ -332,14 +438,6 @@
       };
     }
 
-    const ownControl = el.closest(CLICKABLE);
-    if (!ownControl && labelOf(el).length > MAX_PLAIN_LABEL) {
-      return {
-        error:
-          "That element holds too much to click safely (it looks like a container). Inspect it and pick something smaller inside it.",
-      };
-    }
-
     el.scrollIntoView({ block: "center", behavior: "instant" });
     const rect = el.getBoundingClientRect();
     const x = rect.left + rect.width / 2;
@@ -350,37 +448,8 @@
       // Something covering that point (a toast, a modal) doesn't get the click.
       if (hit && el.contains(hit)) target = hit;
     }
-
-    // Everything the click can reach is screened: the chosen element, the control
-    // it sits in, and a control nested in it where the click really lands — an
-    // icon-only delete button in a row is refused rather than trusted.
-    const hitControl = target.closest(CLICKABLE);
-    const nested = hitControl && hitControl !== el && el.contains(hitControl) ? hitControl : null;
-    const checks = [
-      el,
-      ...(ownControl && ownControl !== el ? [ownControl] : []),
-      ...(nested ? [nested] : []),
-    ];
-    for (const node of checks) {
-      const why = refusal(node, screens);
-      if (why) return { error: why };
-    }
-
-    const anchor = target.closest("a[href]");
-    if (anchor) {
-      let url;
-      try {
-        url = new URL(anchor.href);
-      } catch {
-        return { error: "That link has no usable address." };
-      }
-      if (url.origin !== location.origin) {
-        return { error: "That link leaves this site. Yarvis stays on the current site." };
-      }
-      if (anchor.target && anchor.target !== "_self") {
-        return { error: "That link opens a new tab. Yarvis works in the current tab only." };
-      }
-    }
+    const screened = screenClick(el, target, screens);
+    if (screened.error) return screened;
 
     const base = {
       cancelable: true,
@@ -415,7 +484,8 @@
     fire("pointerdown", { buttons: 1, detail: 1 });
     const down = fire("mousedown", { buttons: 1, detail: 1 });
     // The browser focuses the nearest focusable element unless mousedown was cancelled.
-    const focusable = target.closest("a[href],button,[tabindex],summary,input,select,textarea");
+    // Never a text field: nothing is typed, but a focused composer is one keypress from sending.
+    const focusable = target.closest("a[href],button,[tabindex],summary");
     if (!down.defaultPrevented && focusable) focusable.focus({ preventScroll: true });
     fire("pointerup", { buttons: 0, detail: 1 });
     fire("mouseup", { buttons: 0, detail: 1 });

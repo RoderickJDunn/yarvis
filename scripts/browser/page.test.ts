@@ -118,6 +118,46 @@ describe("click", () => {
     );
   });
 
+  it("refuses form controls, and a label that would toggle one", () => {
+    document.body.innerHTML = `
+      <label id="lbl" for="opt">Email me updates</label><input id="opt" type="checkbox" />
+      <input id="img" type="image" alt="Go" />
+      <div role="switch" id="sw" aria-label="Notifications"></div>`;
+    for (const selector of ["#lbl", "#opt", "#img", "#sw"]) {
+      expect(page().click({ selector, ...screens }).error).toContain("form control");
+    }
+  });
+
+  it("refuses a span whose click would bubble to a form control", () => {
+    document.body.innerHTML = `<label id="lbl"><input type="checkbox" /><span id="text">Remember me</span></label>`;
+    expect(page().click({ selector: "#text", ...screens }).error).toContain("form control");
+  });
+
+  it("refuses something the user can't see", () => {
+    document.body.innerHTML = `<button id="hidden">Threads</button>`;
+    Element.prototype.getBoundingClientRect = () =>
+      ({ x: 0, y: 0, top: 0, left: 0, width: 0, height: 0, right: 0, bottom: 0 }) as DOMRect;
+    expect(page().click({ selector: "#hidden", ...screens }).error).toContain("isn't visible");
+  });
+
+  it("refuses a download link", () => {
+    document.body.innerHTML = `<a id="dl" href="/files/report.pdf" download>Report</a>`;
+    expect(page().click({ selector: "#dl", ...screens }).error).toContain("downloads a file");
+  });
+
+  it("refuses a selector that matches on an attribute value it may not probe", () => {
+    document.head.innerHTML = `<meta name="csrf-token" content="abc123" />`;
+    for (const selector of ['meta[content^="a"]', '[data-token*="x"]', 'a[href*="token="]']) {
+      expect(page().inspect({ selector, limit: 5, ...screens }).error).toContain(
+        "attribute values only",
+      );
+    }
+    expect(
+      page().inspect({ selector: '[data-qa="row"]', limit: 5, ...screens }).error,
+    ).toBeUndefined();
+    document.head.innerHTML = "";
+  });
+
   it("only hovers in hover mode", () => {
     document.body.innerHTML = `<div role="button" id="menu">More options</div>`;
     const seen = listen(document.getElementById("menu") as Element);
@@ -133,11 +173,16 @@ describe("click", () => {
     expect(page().click({ selector: "#row", mode: "direct", ...screens }).clicked?.tag).toBe("div");
   });
 
-  it("clicks by a ref from a listing", () => {
+  it("clicks by a ref from a listing, and reads an older listing's ref as gone", () => {
     document.body.innerHTML = `<button id="b">Threads</button>`;
-    const listed = page().listElements({ maxElements: 50, ...screens });
-    const ref = listed.elements.find((el) => el.label === "Threads")?.ref;
+    const first = page().listElements({ maxElements: 50, ...screens });
+    const old = first.elements.find((el) => el.label === "Threads")?.ref;
+    const second = page().listElements({ maxElements: 50, ...screens });
+    const ref = second.elements.find((el) => el.label === "Threads")?.ref;
+
+    expect(ref).not.toBe(old);
     expect(page().click({ ref, ...screens }).ok).toBe(true);
+    expect(page().click({ ref: old, ...screens }).error).toContain("gone");
   });
 });
 
@@ -178,6 +223,36 @@ describe("listElements", () => {
 });
 
 describe("inspect", () => {
+  it("never shows scripts, and hides the text of what isn't rendered", () => {
+    document.body.innerHTML = `
+      <script>window.boot = { token: "xoxc-secret" }</script>
+      <div id="shown" data-qa="row">visible text</div>`;
+    const scripts = page().inspect({ selector: "script", limit: 5, ...screens });
+    expect(scripts.count).toBe(0);
+
+    Element.prototype.getBoundingClientRect = () =>
+      ({ x: 0, y: 0, top: 0, left: 0, width: 0, height: 0, right: 0, bottom: 0 }) as DOMRect;
+    const hidden = page().inspect({ selector: "#shown", limit: 5, ...screens });
+    expect(hidden.matches[0]?.text).toBe("");
+  });
+
+  it("shows ids and test hooks but not arbitrary data attributes", () => {
+    document.body.innerHTML = `<div id="x" data-qa="row" data-channel-id="C1" data-signed-url="https://cdn/x?sig=abc">row</div>`;
+    const out = page().inspect({ selector: "#x", limit: 5, ...screens });
+    expect(out.matches[0]?.attributes).toEqual({
+      id: "x",
+      "data-qa": "row",
+      "data-channel-id": "C1",
+    });
+  });
+
+  it("reports the same refusal a click would get", () => {
+    document.body.innerHTML = `<div role="treeitem" id="row">general<button id="trash"></button></div>`;
+    const inspected = page().inspect({ selector: "#trash", limit: 5, ...screens });
+    const clicked = page().click({ selector: "#trash", ...screens });
+    expect(inspected.matches[0]?.refused).toBe(clicked.error);
+  });
+
   it("shows structure without values that carry data, and why a click would be refused", () => {
     document.body.innerHTML = `
       <div role="treeitem" data-qa="row" class="c-row">
@@ -215,6 +290,47 @@ describe("Slack readPage", () => {
       "[Today at 12:40:24 PM] Christine: Can you look at the intake flow? (3 replies)",
     );
     expect(out.text).toContain("[Today at 12:40:29 PM] Christine: It's blocking the pilot.");
+  });
+
+  it("keeps the newest messages when they don't all fit", () => {
+    document.body.innerHTML = Array.from(
+      { length: 50 },
+      (_, i) => `
+      <div data-qa="message_container">
+        <span data-qa="message_sender_name">Max</span>
+        <div data-qa="message-text">message number ${i} ${"x".repeat(40)}</div>
+      </div>`,
+    ).join("");
+    const out = page().readPage({ maxChars: 800 });
+
+    expect(out.truncated).toBe(true);
+    expect(out.text).toContain("message number 49");
+    expect(out.text).not.toContain("message number 0 ");
+    expect((out.text as string).length).toBeLessThanOrEqual(900);
+  });
+
+  it("leaves out an open thread's messages", () => {
+    document.body.innerHTML = `
+      <div class="p-workspace__primary_view">
+        <div data-qa="message_container">
+          <span data-qa="message_sender_name">Christine</span>
+          <div data-qa="message-text">In the channel</div>
+        </div>
+      </div>
+      <div class="p-flexpane">
+        <div data-qa="message_container"><div data-qa="message-text">In the thread</div></div>
+      </div>`;
+    const out = page().readPage({ maxChars: 10_000 });
+    expect(out.text).toContain("In the channel");
+    expect(out.text).not.toContain("In the thread");
+  });
+
+  it("builds an openUrl on an Enterprise Grid org too", () => {
+    happy().setURL("https://app.slack.com/client/E0ORG1/C999");
+    document.body.innerHTML = `
+      <div role="treeitem"><div data-qa-channel-sidebar-channel-id="C0ABC1234">agentic-intake</div></div>`;
+    const out = page().listElements({ maxElements: 50, ...screens });
+    expect(out.elements[0]?.openUrl).toBe("https://app.slack.com/client/E0ORG1/C0ABC1234");
   });
 
   it("falls back to the page text and says so when it finds no messages", () => {
