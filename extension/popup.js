@@ -56,4 +56,15 @@ document.getElementById("rename").addEventListener("submit", async (event) => {
   }, 1500);
 });
 
+// Chrome only opens the side panel from inside the click, and waiting on another
+// call first can lose that, so the window is looked up before anyone clicks.
+let windowId;
+chrome.windows.getCurrent().then((current) => {
+  windowId = current.id;
+});
+document.getElementById("activity").addEventListener("click", () => {
+  if (windowId === undefined) return;
+  chrome.sidePanel.open({ windowId }).then(() => close());
+});
+
 init();

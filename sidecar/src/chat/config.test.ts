@@ -26,19 +26,31 @@ describe("chat config", () => {
   });
 
   it("saves and reads back the budget", async () => {
-    const saved = await saveChatConfig({ maxSteps: 40, maxOutputTokens: 8000 });
-    expect(saved).toEqual({ maxSteps: 40, maxOutputTokens: 8000 });
+    const saved = await saveChatConfig({
+      maxSteps: 40,
+      maxOutputTokens: 8000,
+      toolResultChars: 20_000,
+    });
+    expect(saved).toEqual({ maxSteps: 40, maxOutputTokens: 8000, toolResultChars: 20_000 });
     expect(await getChatConfig()).toEqual(saved);
   });
 
   // Null is a value here, not an absent field: it means "leave the provider's
   // own limit alone", which is not the same as "fall back to a default cap".
   it("keeps an explicit null output cap", async () => {
-    await saveChatConfig({ maxSteps: 40, maxOutputTokens: 8000 });
-    expect(await saveChatConfig({ maxSteps: 40, maxOutputTokens: null })).toEqual({
-      maxSteps: 40,
-      maxOutputTokens: null,
-    });
+    await saveChatConfig({ maxSteps: 40, maxOutputTokens: 8000, toolResultChars: 400 });
+    expect(
+      await saveChatConfig({ maxSteps: 40, maxOutputTokens: null, toolResultChars: 400 }),
+    ).toEqual({ maxSteps: 40, maxOutputTokens: null, toolResultChars: 400 });
+  });
+
+  // A settings file written before the field existed must not read as undefined.
+  it("fills in the tool result length for a file saved before it existed", async () => {
+    await withSection<{ maxSteps: number }, void>("chatConfig", () => ({
+      next: { maxSteps: 12 },
+      result: undefined,
+    }));
+    expect((await getChatConfig()).toolResultChars).toBe(DEFAULT_CHAT_CONFIG.toolResultChars);
   });
 
   it("leaves the other sections of the settings file alone", async () => {
@@ -46,7 +58,7 @@ describe("chat config", () => {
       next: { keep: true },
       result: undefined,
     }));
-    await saveChatConfig({ maxSteps: 12, maxOutputTokens: null });
+    await saveChatConfig({ maxSteps: 12, maxOutputTokens: null, toolResultChars: 400 });
     expect(await readSection<{ keep: boolean }>("voiceConfig")).toEqual({ keep: true });
   });
 });

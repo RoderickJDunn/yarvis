@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Yarvis",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Lets Yarvis read, and move around within, the site open in this Chrome tab, on request.",
   "minimum_chrome_version": "116",
   "permissions": [
@@ -9,6 +9,7 @@
     "declarativeNetRequest",
     "nativeMessaging",
     "scripting",
+    "sidePanel",
     "storage",
     "tabs"
   ],
@@ -20,5 +21,8 @@
   "action": {
     "default_title": "Yarvis",
     "default_popup": "popup.html"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
   }
 }

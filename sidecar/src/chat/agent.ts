@@ -44,8 +44,6 @@ function emptyTurnMessage(
   }
 }
 
-/** Longest tool result kept for display and storage; the model saw all of it. */
-const TOOL_RESULT_CHARS = 400;
 /**
  * Longest arguments kept. The model was handed the whole value; what is
  * persisted and replayed into the UI is a record of the call, and tool
@@ -69,12 +67,15 @@ function serverOf(id: string, names?: ReadonlyMap<string, string>): string | und
   return names?.get(serverId) ?? serverId;
 }
 
-/** A tool's output as one short line: enough to see what came back, not the payload. */
-function summarizeToolOutput(output: unknown): string | undefined {
+/**
+ * A tool's output as kept for display and storage, capped at the turn's
+ * `toolResultChars`. The model saw all of it.
+ */
+function summarizeToolOutput(output: unknown, maxChars: number): string | undefined {
   if (output === undefined || output === null) return undefined;
   const text = typeof output === "string" ? output : safeJson(output);
   if (!text) return undefined;
-  const capped = text.length > TOOL_RESULT_CHARS ? `${text.slice(0, TOOL_RESULT_CHARS)}…` : text;
+  const capped = text.length > maxChars ? `${text.slice(0, maxChars)}…` : text;
   return redactSecrets(capped);
 }
 
@@ -445,7 +446,7 @@ export async function* runAgentTurn(params: AgentTurnParams): AsyncGenerator<Age
           const entry = settle(
             part.toolCallId,
             denied ? "denied" : "ok",
-            summarizeToolOutput(part.output),
+            summarizeToolOutput(part.output, budget.toolResultChars),
           );
           if (entry) yield { type: "tool_result", id: entry.id, ...toolOutcome(entry) };
           break;

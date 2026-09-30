@@ -41,6 +41,11 @@ Yarvis sidecar  <--HTTP long poll-->  native host  <--stdio-->  extension
    name (e.g. `work`).
 4. With Yarvis running, ask it about your current tab.
 
+The popup's "Show activity beside the page" opens Chrome's side panel with a log
+of every command Yarvis sent this profile: the tool, the arguments and the full
+result or error, newest first. It lives in session storage, so it is gone when
+Chrome quits, and each result is kept up to 100,000 characters.
+
 The popup shows whether the helper is running and which Yarvis instances it can
 reach, with a dot for whether each one is answering. The badge on the icon is
 the number of connected instances.

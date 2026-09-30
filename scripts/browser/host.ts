@@ -113,7 +113,7 @@ async function poll(poller: Poller): Promise<void> {
         const item = (await res.json()) as { id: string };
         pending.set(item.id, { instance, at: Date.now() });
         try {
-          send({ type: "command", ...item });
+          send({ type: "command", instance: instance.name, ...item });
         } catch (error) {
           // Say so now rather than leave the tool to wait out its timeout.
           pending.delete(item.id);

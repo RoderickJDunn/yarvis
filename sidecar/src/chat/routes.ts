@@ -11,9 +11,11 @@ import { listMcpServers } from "../mcp/service.ts";
 import { runAgentTurn } from "./agent.ts";
 import {
   type ChatConfig,
+  DEFAULT_CHAT_CONFIG,
   getChatConfig,
   MAX_OUTPUT_TOKENS_CEILING,
   MAX_STEPS_CEILING,
+  MAX_TOOL_RESULT_CHARS_CEILING,
   saveChatConfig,
 } from "./config.ts";
 import { createSession, getMessages, listSessions } from "./service.ts";
@@ -58,6 +60,13 @@ const approvalSchema = z.object({ approved: z.boolean() });
 const configSchema = z.object({
   maxSteps: z.number().int().min(1).max(MAX_STEPS_CEILING),
   maxOutputTokens: z.number().int().min(256).max(MAX_OUTPUT_TOKENS_CEILING).nullable(),
+  // Optional so a client that predates the field keeps the stored value's default.
+  toolResultChars: z
+    .number()
+    .int()
+    .min(100)
+    .max(MAX_TOOL_RESULT_CHARS_CEILING)
+    .default(DEFAULT_CHAT_CONFIG.toolResultChars),
 });
 
 export function createChatRoutes(config: Config): Hono {

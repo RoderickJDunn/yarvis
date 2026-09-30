@@ -14,6 +14,7 @@
 // host who it is: a random id kept for good, and a name the user sets in the
 // popup. That name is what an agent passes to reach "the work profile".
 
+import { recordActivity } from "./activity.js";
 import { loadProfile, PROFILE_KEY } from "./profile.js";
 import { BLOCKED_LABEL_SOURCE, BLOCKED_PATH_SOURCE, isBlockedPath, sameOrigin } from "./site.js";
 
@@ -72,6 +73,7 @@ async function onMessage(message) {
     return;
   }
   if (message?.type !== "command") return;
+  const startedAt = Date.now();
   let reply;
   try {
     reply = { ok: true, data: await run(message.command) };
@@ -79,6 +81,14 @@ async function onMessage(message) {
     reply = { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
   port?.postMessage({ id: message.id, ...reply });
+  recordActivity({
+    id: message.id,
+    at: startedAt,
+    durationMs: Date.now() - startedAt,
+    instance: message.instance,
+    command: message.command,
+    ...reply,
+  });
 }
 
 async function run(command) {

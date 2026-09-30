@@ -230,6 +230,8 @@ export interface ChatConfig {
   maxSteps: number;
   /** Null leaves the provider's own output limit in place. */
   maxOutputTokens: number | null;
+  /** How much of each tool result the chat keeps to show; the model sees all of it. */
+  toolResultChars: number;
 }
 
 export async function getChatConfig(): Promise<ChatConfig> {
