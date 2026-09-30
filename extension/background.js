@@ -61,7 +61,9 @@ async function sayHello() {
  * it shows the last known state even while the worker is starting back up.
  */
 function setStatus(status) {
-  chrome.storage.session.set({ status });
+  chrome.storage.session.set({ status }).catch(() => {
+    // The badge below still tells the truth if the popup's copy can't be written.
+  });
   const connected = status.instances.filter((instance) => instance.connected).length;
   chrome.action.setBadgeText({ text: connected > 0 ? String(connected) : "" });
   chrome.action.setBadgeBackgroundColor({ color: "#2e7d32" });

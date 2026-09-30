@@ -39,7 +39,7 @@ export const DEFAULT_CHAT_CONFIG: ChatConfig = {
 /** Ceilings the routes validate against, so a typo can't cost a fortune. */
 export const MAX_STEPS_CEILING = 500;
 export const MAX_OUTPUT_TOKENS_CEILING = 200_000;
-/** A read page is capped at 60,000 characters, so this keeps a whole one plus its wrapping. */
+/** `read_browser_page` returns at most 60,000 characters, so this keeps a whole one plus its wrapping. */
 export const MAX_TOOL_RESULT_CHARS_CEILING = 100_000;
 
 /** Returns the stored budget merged over the defaults. */

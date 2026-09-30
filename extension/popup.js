@@ -62,9 +62,15 @@ let windowId;
 chrome.windows.getCurrent().then((current) => {
   windowId = current.id;
 });
-document.getElementById("activity").addEventListener("click", () => {
+document.getElementById("activity").addEventListener("click", (event) => {
+  const button = event.currentTarget;
   if (windowId === undefined) return;
-  chrome.sidePanel.open({ windowId }).then(() => close());
+  chrome.sidePanel
+    .open({ windowId })
+    .then(() => close())
+    .catch((error) => {
+      button.textContent = `Couldn't open the side panel: ${error.message}`;
+    });
 });
 
 init();

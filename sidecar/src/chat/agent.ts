@@ -75,8 +75,9 @@ function summarizeToolOutput(output: unknown, maxChars: number): string | undefi
   if (output === undefined || output === null) return undefined;
   const text = typeof output === "string" ? output : safeJson(output);
   if (!text) return undefined;
-  const capped = text.length > maxChars ? `${text.slice(0, maxChars)}…` : text;
-  return redactSecrets(capped);
+  // Redacted before the cut, so a secret straddling the cut is still caught whole.
+  const redacted = redactSecrets(text);
+  return redacted.length > maxChars ? `${redacted.slice(0, maxChars)}…` : redacted;
 }
 
 function safeJson(value: unknown): string {

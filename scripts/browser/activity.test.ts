@@ -1,5 +1,13 @@
 import { describe, expect, it } from "bun:test";
-import { describeResult, MAX_RESULT_CHARS, TOOL_FOR_COMMAND } from "../../extension/activity.js";
+import {
+  type ActivityRow,
+  describeResult,
+  MAX_LOG_BYTES,
+  MAX_RESULT_CHARS,
+  nextIndex,
+  storedBytes,
+  TOOL_FOR_COMMAND,
+} from "../../extension/activity.js";
 
 describe("describeResult", () => {
   it("keeps a whole result as readable JSON", () => {
@@ -27,5 +35,41 @@ describe("TOOL_FOR_COMMAND", () => {
     expect(Object.keys(TOOL_FOR_COMMAND).sort()).toEqual(
       ["click", "list_elements", "list_tabs", "navigate", "read_page", "scroll"].sort(),
     );
+  });
+});
+
+function row(id: string, bytes: number): ActivityRow {
+  return { id, at: 0, durationMs: 0, instance: "", tool: "t", ok: true, bytes };
+}
+
+describe("nextIndex", () => {
+  it("puts the newest entry first", () => {
+    const { index, dropped } = nextIndex([row("a", 10)], row("b", 10));
+    expect(index.map((r) => r.id)).toEqual(["b", "a"]);
+    expect(dropped).toEqual([]);
+  });
+
+  it("drops the oldest entries past fifty", () => {
+    const existing = Array.from({ length: 50 }, (_, i) => row(`old-${i}`, 1));
+    const { index, dropped } = nextIndex(existing, row("new", 1));
+    expect(index).toHaveLength(50);
+    expect(dropped).toEqual(["old-49"]);
+  });
+
+  it("drops the oldest entries once the log would outgrow its byte budget", () => {
+    const half = Math.floor(MAX_LOG_BYTES / 2);
+    const { index, dropped } = nextIndex(
+      [row("newer", half), row("older", half)],
+      row("new", half),
+    );
+    expect(index.map((r) => r.id)).toEqual(["new", "newer"]);
+    expect(dropped).toEqual(["older"]);
+  });
+});
+
+describe("storedBytes", () => {
+  it("counts escapes and multi-byte characters the way storage does", () => {
+    expect(storedBytes("a\nb")).toBe(6);
+    expect(storedBytes("é")).toBe(4);
   });
 });

@@ -1,10 +1,13 @@
-import { ACTIVITY_KEY, clearActivity } from "./activity.js";
+import { clearActivity, INDEX_KEY, loadEntry } from "./activity.js";
 
 const list = document.getElementById("entries");
 const empty = document.getElementById("empty");
 
-/** Rows the user has opened, so a new entry arriving doesn't fold them back up. */
-const open = new Set();
+/**
+ * Rows already on screen, by id. A new command adds one row and drops any the
+ * log let go of; the rest keep their open state, scroll position and selection.
+ */
+const rows = new Map();
 
 function block(label, text) {
   const heading = document.createElement("h3");
@@ -19,50 +22,75 @@ function block(label, text) {
   return [heading, pre, copy];
 }
 
-function render(entries) {
-  list.replaceChildren();
-  empty.hidden = entries.length > 0;
-  for (const entry of entries) {
-    const item = document.createElement("li");
-    const details = document.createElement("details");
-    details.open = open.has(entry.id);
-    details.addEventListener("toggle", () => {
-      if (details.open) open.add(entry.id);
-      else open.delete(entry.id);
-    });
+function buildRow(row) {
+  const item = document.createElement("li");
+  const details = document.createElement("details");
+  const summary = document.createElement("summary");
+  const dot = document.createElement("span");
+  dot.className = row.ok ? "dot on" : "dot error";
+  dot.title = row.ok ? "Answered" : "Failed";
+  const tool = document.createElement("span");
+  tool.className = "tool";
+  tool.textContent = row.tool;
+  const meta = document.createElement("span");
+  meta.className = "meta";
+  const time = new Date(row.at).toLocaleTimeString();
+  meta.textContent = [row.instance, time, `${row.durationMs} ms`].filter(Boolean).join(" · ");
+  summary.append(dot, tool, meta);
+  details.append(summary);
 
-    const summary = document.createElement("summary");
-    const dot = document.createElement("span");
-    dot.className = entry.ok ? "dot on" : "dot error";
-    dot.title = entry.ok ? "Answered" : "Failed";
-    const tool = document.createElement("span");
-    tool.className = "tool";
-    tool.textContent = entry.tool;
-    const meta = document.createElement("span");
-    meta.className = "meta";
-    const time = new Date(entry.at).toLocaleTimeString();
-    meta.textContent = [entry.instance, time, `${entry.durationMs} ms`].filter(Boolean).join(" · ");
-    summary.append(dot, tool, meta);
-
+  // A result can be 100,000 characters, so it is only fetched and laid out when
+  // someone opens the row.
+  let loaded = false;
+  details.addEventListener("toggle", async () => {
+    if (!details.open || loaded) return;
+    loaded = true;
+    const entry = await loadEntry(row.id);
+    if (!entry) {
+      details.append(
+        Object.assign(document.createElement("p"), { textContent: "No longer kept." }),
+      );
+      return;
+    }
     const result = entry.resultTruncated
       ? `${entry.result}\n… cut here: the panel keeps the first 100,000 characters.`
       : entry.result;
     details.append(
-      summary,
       ...block("Arguments", JSON.stringify(entry.args, null, 2)),
-      ...block(entry.ok ? "Result" : "Error", result),
+      ...block(row.ok ? "Result" : "Error", result),
     );
-    item.append(details);
-    list.append(item);
+  });
+  item.append(details);
+  return item;
+}
+
+function render(index) {
+  const wanted = new Set(index.map((row) => row.id));
+  for (const [id, element] of rows) {
+    if (wanted.has(id)) continue;
+    element.remove();
+    rows.delete(id);
   }
+  // The index is newest first; walk it and put each row in place.
+  let previous = null;
+  for (const row of index) {
+    let element = rows.get(row.id);
+    if (!element) {
+      element = buildRow(row);
+      rows.set(row.id, element);
+    }
+    const expected = previous ? previous.nextSibling : list.firstChild;
+    if (expected !== element) list.insertBefore(element, expected);
+    previous = element;
+  }
+  empty.hidden = index.length > 0;
 }
 
 document.getElementById("clear").addEventListener("click", () => {
-  open.clear();
   clearActivity();
 });
 
-chrome.storage.session.get(ACTIVITY_KEY).then((stored) => render(stored[ACTIVITY_KEY] ?? []));
+chrome.storage.session.get(INDEX_KEY).then((stored) => render(stored[INDEX_KEY] ?? []));
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "session" && changes[ACTIVITY_KEY]) render(changes[ACTIVITY_KEY].newValue ?? []);
+  if (area === "session" && changes[INDEX_KEY]) render(changes[INDEX_KEY].newValue ?? []);
 });
