@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { SETTINGS_TABS, type SettingsTabKey, useSettingsTab } from "../lib/settingsTabs";
 import AgentSection from "./AgentSection";
 import ChatBudgetSection from "./ChatBudgetSection";
 import ComplexityModelSection from "./ComplexityModelSection";
@@ -21,56 +21,26 @@ import ToolManagerSection from "./ToolManagerSection";
 import VoiceSection from "./VoiceSection";
 import WipSection from "./WipSection";
 
-type TabKey =
-  | "credentials"
-  | "providers"
-  | "tools"
-  | "repos"
-  | "prs"
-  | "voice"
-  | "embeddings"
-  | "telegram"
-  | "wip"
-  | "assistant"
-  | "diagnostics";
-
-const TABS: { key: TabKey; label: string }[] = [
-  { key: "credentials", label: "Credentials" },
-  { key: "providers", label: "LLM Providers" },
-  { key: "tools", label: "Tools & MCP" },
-  { key: "repos", label: "Repositories" },
-  { key: "prs", label: "PR review" },
-  { key: "voice", label: "Voice" },
-  { key: "embeddings", label: "Embeddings" },
-  { key: "telegram", label: "Telegram" },
-  { key: "wip", label: "Work in progress" },
-  { key: "assistant", label: "Assistant" },
-  { key: "diagnostics", label: "Diagnostics" },
-];
-
-const TAB_STORAGE_KEY = "yarvis.settings.activeTab";
-
 /**
  * The Settings tab — where the user configures credentials, custom LLM
  * providers, MCP servers, and tool policies. Health/status indicators stay on
  * the Dashboard tab. Sections are grouped into tabs so each one stays
  * self-contained and the page doesn't become an ever-growing scroll.
  */
-export default function SettingsPanel() {
-  const [active, setActive] = useState<TabKey>(() => {
-    const saved = localStorage.getItem(TAB_STORAGE_KEY) as TabKey | null;
-    return saved && TABS.some((t) => t.key === saved) ? saved : "credentials";
-  });
-
-  const select = (key: TabKey) => {
-    setActive(key);
-    localStorage.setItem(TAB_STORAGE_KEY, key);
-  };
+export default function SettingsPanel({
+  requestedTab = null,
+  onRequestConsumed,
+}: {
+  /** A tab to switch to, asked for by a `yarvis://settings/...` link or the setup guide. */
+  requestedTab?: SettingsTabKey | null;
+  onRequestConsumed?: () => void;
+} = {}) {
+  const [active, select] = useSettingsTab(requestedTab, onRequestConsumed);
 
   return (
     <div className="space-y-5">
       <nav className="flex gap-1 border-b border-zinc-800">
-        {TABS.map((tab) => (
+        {SETTINGS_TABS.map((tab) => (
           <button
             key={tab.key}
             onClick={() => select(tab.key)}

@@ -156,8 +156,14 @@ it quits the app.
 
 ## 5. First configuration
 
-The app starts with nothing configured. Open **Settings** (the gear at the
-bottom of the nav rail on the left) and do these three things.
+The app starts with nothing configured, so on first launch it opens a **setup
+guide**. It covers the same ground as the steps below, plus choosing where
+secrets are kept (the macOS Keychain or 1Password), and finishes by offering a
+tour of each page. You can skip it and reopen it, or the tour, at any time from the
+**Help** button (the **?** at the bottom of the nav rail).
+
+To do the same by hand, open **Settings** (the gear at the bottom of the nav
+rail on the left) and do these three things.
 
 1. **Connect the database.** Go to **Settings → Credentials**. In **Database
    URL**, enter `postgres://localhost:5432/yarvis` and press **Save**. The
@@ -176,6 +182,9 @@ bottom of the nav rail on the left) and do these three things.
    which defaults to `us-east-1`). For an OpenAI- or Anthropic-compatible
    endpoint (LiteLLM, Ollama, a company gateway), use **Settings → LLM
    Providers → Add provider** instead.
+
+   The setup guide can't check AWS credentials, so with only Bedrock
+   configured it keeps opening at launch until you finish or skip it.
 3. **Check it works.** Open **Dashboard** (bottom of the nav rail). **Database**
    should say reachable, and your provider's dot should be lit. Then open
    **Chat** (Cmd+1), pick the provider and a model at the top, and say hello.
@@ -183,7 +192,10 @@ bottom of the nav rail on the left) and do these three things.
 Secrets are saved to one Keychain item and never read back into the UI. To
 change one, save a new value over it.
 
-That's a working Yarvis. Everything below is optional.
+That's a working Yarvis. Everything below is optional. From here you can also
+ask the assistant where a setting is or how to set something up ("where do I
+add a GitHub token?"). It answers from these docs, with links that open the
+right page.
 
 ## 6. Turn on the features you want
 
