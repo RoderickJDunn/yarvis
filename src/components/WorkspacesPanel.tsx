@@ -13,6 +13,7 @@ import {
   getWorkspace,
   ignoreWorkspaceError,
   listWorkspaces,
+  renameWorkspace,
   unlinkWorkspaceIssue,
   unlinkWorkspaceTask,
   type WorkspaceDetail,
@@ -46,6 +47,7 @@ import LinkWorkModal from "./workspaces/LinkWorkModal";
 import { provisionActions, setupLogToAutoOpen } from "./workspaces/provisionActions";
 import { consumeProvision } from "./workspaces/provisionStream";
 import WorkspaceFileDiff from "./workspaces/WorkspaceFileDiff";
+import WorkspaceNameHeading from "./workspaces/WorkspaceNameHeading";
 import WorkspacePrBadges from "./workspaces/WorkspacePrBadges";
 import WorkspacePrStatus from "./workspaces/WorkspacePrStatus";
 import WorkspaceSetupLog from "./workspaces/WorkspaceSetupLog";
@@ -1016,6 +1018,16 @@ function WorkspaceDetailView({
     }
   }, [id, load, onChanged]);
 
+  // Errors propagate so the heading can show them beside the field.
+  const rename = useCallback(
+    async (name: string) => {
+      await renameWorkspace(id, name);
+      await load();
+      onChanged();
+    },
+    [id, load, onChanged],
+  );
+
   // Auto-provision a workspace whose kick-off is still running. The sidecar
   // drives it whether or not anyone is here, so this only joins the run already
   // going — which is what puts its log on screen. The ref stops it re-firing on
@@ -1119,7 +1131,7 @@ function WorkspaceDetailView({
     <div className="relative flex h-full min-h-0 flex-col">
       <div className="shrink-0 border-b border-zinc-800 px-4 py-2">
         <div className="flex items-center gap-2">
-          <h2 className="text-sm font-medium text-zinc-100">{detail.name}</h2>
+          <WorkspaceNameHeading name={detail.name} onRename={rename} />
           <StatusBadge status={detail.status} />
           <span className="ml-auto truncate font-mono text-xs text-zinc-500">
             {detail.rootPath}

@@ -79,6 +79,17 @@ workspace checked out on the PR's branch, with an agent at a blank prompt. See
 workspace and starts the session on a brief it writes from your conversation.
 See [The assistant](assistant.md).
 
+### Rename a workspace
+
+Press **Rename** next to the workspace's name in its header, type the new name,
+and press Enter or click away to save. Escape keeps the old name.
+
+Only the name shown in Yarvis changes. The folder and the branch keep the name
+the workspace was created with, because a running agent session works in that
+folder and the branch may already be pushed. The `AGENTS.md` in the workspace
+folder also keeps the old name. It is only rewritten if provisioning runs
+again, such as a retry after a failure.
+
 ### What provisioning does
 
 Creating a workspace starts provisioning in the sidecar. For each repo it

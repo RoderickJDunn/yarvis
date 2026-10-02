@@ -29,6 +29,7 @@ import {
   listWorkspaces,
   type ProvisionEvent,
   provisionWorkspace,
+  renameWorkspace,
   saveWorkspaceRepoFile,
   startArchiveWorkspace,
   unlinkIssue,
@@ -71,6 +72,17 @@ const createWorkspaceSchema = z.object({
   // one the chat agent's tools produce, and a client can't put arbitrary text
   // in front of an auto-approved session.
   startWork: z.boolean().optional().default(false),
+});
+
+// One line: the name becomes the heading of the AGENTS.md the agent reads, where
+// a line break would start a section of its own.
+const renameWorkspaceSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1)
+    .max(200)
+    .refine((n) => !CONTROL_CHARACTERS.test(n), "name must be a single line"),
 });
 
 // Which of a repo's worktrees a request means, when it isn't the one the
@@ -298,6 +310,20 @@ export function createWorkspaceRoutes(config: Config): Hono {
     // it. Clients open the workspace and attach to whatever session is there.
     const { pendingBrief: _internal, ...body } = workspace;
     return c.json(body);
+  });
+
+  router.patch("/:id", async (c) => {
+    const id = c.req.param("id");
+    if (!z.string().uuid().safeParse(id).success) {
+      return c.json({ error: "invalid workspace id" }, 400);
+    }
+    const body = await c.req.json().catch(() => null);
+    const parsed = renameWorkspaceSchema.safeParse(body);
+    if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
+    const workspace = await renameWorkspace(db(), id, parsed.data.name);
+    if (!workspace) return c.json({ error: "not found" }, 404);
+    const { pendingBrief: _internal, ...rest } = workspace;
+    return c.json(rest);
   });
 
   // Drives provisioning and streams progress as SSE. The setup script's output

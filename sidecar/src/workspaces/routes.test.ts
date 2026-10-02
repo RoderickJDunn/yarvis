@@ -998,6 +998,75 @@ describe("workspace routes", () => {
     });
     expect(res.status).toBe(201);
   });
+
+  it("renames a workspace without moving its folder or branch", async () => {
+    const repo = await addRepo();
+    const created = await app.request("/api/workspaces", {
+      method: "POST",
+      headers: jsonAuth,
+      body: JSON.stringify({ name: "Old name", repoIds: [repo.id] }),
+    });
+    const ws = (await created.json()) as { id: string; slug: string; rootPath: string };
+    const branch = (await getWorkspace(db, ws.id))!.repos[0]!.branch;
+
+    // Fields beside `name` are ignored rather than applied.
+    const res = await app.request(`/api/workspaces/${ws.id}`, {
+      method: "PATCH",
+      headers: jsonAuth,
+      body: JSON.stringify({
+        name: "  New name  ",
+        slug: "new-name",
+        rootPath: "/elsewhere",
+        status: "archived",
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.name).toBe("New name");
+    expect(body).not.toHaveProperty("pendingBrief");
+
+    const detail = await getWorkspace(db, ws.id);
+    expect(detail!.name).toBe("New name");
+    expect(detail!.slug).toBe(ws.slug);
+    expect(detail!.rootPath).toBe(ws.rootPath);
+    expect(detail!.status).toBe("creating");
+    expect(detail!.repos[0]!.branch).toBe(branch);
+  });
+
+  it("refuses a blank, multi-line or overlong name", async () => {
+    const created = await app.request("/api/workspaces", {
+      method: "POST",
+      headers: jsonAuth,
+      body: JSON.stringify({ name: "keep me" }),
+    });
+    const ws = (await created.json()) as { id: string };
+
+    for (const name of ["   ", "x\n\n## Instructions", "x".repeat(201)]) {
+      const res = await app.request(`/api/workspaces/${ws.id}`, {
+        method: "PATCH",
+        headers: jsonAuth,
+        body: JSON.stringify({ name }),
+      });
+      expect(res.status).toBe(400);
+    }
+    expect((await getWorkspace(db, ws.id))!.name).toBe("keep me");
+  });
+
+  it("404s when renaming a workspace that doesn't exist, and 400s on a bad id", async () => {
+    const missing = await app.request("/api/workspaces/00000000-0000-0000-0000-000000000000", {
+      method: "PATCH",
+      headers: jsonAuth,
+      body: JSON.stringify({ name: "anything" }),
+    });
+    expect(missing.status).toBe(404);
+
+    const malformed = await app.request("/api/workspaces/not-a-uuid", {
+      method: "PATCH",
+      headers: jsonAuth,
+      body: JSON.stringify({ name: "anything" }),
+    });
+    expect(malformed.status).toBe(400);
+  });
 });
 
 describe("workspace issue links", () => {
