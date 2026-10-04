@@ -225,10 +225,23 @@
     }
   }
 
+  /**
+   * The page's title, or the adapter's version of it: Gmail's carries the
+   * account's address ("Inbox (2) - you@example.com - Mail"), which no answer
+   * needs.
+   */
+  function pageTitle() {
+    try {
+      return adapter()?.title?.() ?? document.title;
+    } catch {
+      return document.title;
+    }
+  }
+
   function readPage({ maxChars }) {
     const base = {
       url: location.href,
-      title: document.title,
+      title: pageTitle(),
       selection: String(getSelection() ?? ""),
     };
     const site = adapter();
@@ -263,7 +276,14 @@
       // An adapter that trips over one element shouldn't lose the listing.
     }
     return {
-      kind: el.tagName === "A" ? "link" : el.getAttribute("role") || "button",
+      // The role is page-controlled text that lands in the listing as-is, so only
+      // a plain word is kept: one with quotes or a newline could fake a line.
+      kind:
+        el.tagName === "A"
+          ? "link"
+          : /^[a-z]+$/.test(el.getAttribute("role") ?? "")
+            ? el.getAttribute("role")
+            : "button",
       label,
       ...(el.tagName === "A" ? { href: el.href } : {}),
       ...extra,
@@ -324,7 +344,7 @@
     const site = adapter();
     return {
       url: location.href,
-      title: document.title,
+      title: pageTitle(),
       ...(site ? { adapter: site.name } : {}),
       elements,
       truncated,
@@ -397,7 +417,7 @@
     });
     return {
       url: location.href,
-      title: document.title,
+      title: pageTitle(),
       count: inspectable.length,
       matches,
     };

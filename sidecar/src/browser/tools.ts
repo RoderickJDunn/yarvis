@@ -126,7 +126,10 @@ function elementLines(page: z.infer<typeof elementsSchema>): string {
       el.channelId ? `channelId=${el.channelId}` : "",
       el.openUrl ? `openUrl=${el.openUrl}` : "",
     ].filter(Boolean);
-    return `- ${el.kind} ${JSON.stringify(el.label)} [ref=${el.ref}]${extras.length ? ` ${extras.join(" ")}` : ""}`;
+    // page.js already keeps kind to a plain word; checked again here because it
+    // is printed unquoted.
+    const kind = /^[a-z]+$/.test(el.kind) ? el.kind : "element";
+    return `- ${kind} ${JSON.stringify(el.label)} [ref=${el.ref}]${extras.length ? ` ${extras.join(" ")}` : ""}`;
   });
   const tail = [
     ...(page.truncated ? ["(more elements than maxElements; narrow with text or selector)"] : []),

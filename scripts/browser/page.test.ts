@@ -243,6 +243,14 @@ describe("click", () => {
   });
 });
 
+describe("listElements roles", () => {
+  it("keeps a page-controlled role to a plain word", () => {
+    document.body.innerHTML = `<div role='button" [ref=9]&#10;- link "Inbox" [ref=3]'>Threads</div>`;
+    const out = page().listElements({ maxElements: 50, selector: "div", ...screens });
+    expect(out.elements[0]?.kind).toBe("button");
+  });
+});
+
 describe("listElements", () => {
   it("leaves out controls that send or change things and says how many", () => {
     document.body.innerHTML = `<button>Threads</button><button>Send</button><button>Delete message</button>`;
@@ -440,7 +448,9 @@ describe("Gmail readPage", () => {
     expect(out.text).toContain(
       "Thu, Oct 1, 2026, 9:00 AM · Rob Klomps — Accepted: Standup [id 18c4e99999]",
     );
-    expect(out.text).not.toContain("you@example.com");
+    // The title carries the account's address; the adapter's version doesn't.
+    expect(out.title).toBe("Inbox (2)");
+    expect(JSON.stringify(out)).not.toContain("you@example.com");
   });
 
   it("reads an open conversation, keeping the latest messages when they don't fit", () => {
@@ -466,6 +476,69 @@ describe("Gmail readPage", () => {
     expect(out.text).toContain("reply number 29");
     expect(out.text).not.toContain("reply number 0 ");
     expect(out.truncated).toBe(true);
+  });
+});
+
+describe("Gmail stale views", () => {
+  beforeEach(() => {
+    happy().setURL("https://mail.google.com/mail/u/0/#inbox");
+    document.title = "Inbox - you@example.com - Mail";
+  });
+
+  it("reads the mailbox when a thread left earlier is still in the page, hidden", () => {
+    document.body.innerHTML = `
+      <div role="main">
+        <h2 class="hP" id="stale">Old thread</h2>
+        <table><tbody><tr class="zA"><td class="yX"><span class="yP" name="Rob">Rob</span></td>
+          <td><span class="bog">Fresh mail</span></td><td class="xW"><span>9:00</span></td></tr></tbody></table>
+      </div>`;
+    const stale = document.getElementById("stale") as HTMLElement;
+    stale.getBoundingClientRect = () => ({ width: 0, height: 0 }) as DOMRect;
+    const out = page().readPage({ maxChars: 10_000 });
+    expect(out.text).toContain("Mailbox: Inbox");
+    expect(out.text).toContain("Fresh mail");
+    expect(out.text).not.toContain("Old thread");
+  });
+
+  it("falls back when there is neither a mailbox nor a conversation", () => {
+    document.body.innerHTML = `<div role="main">Settings</div>`;
+    expect(page().readPage({ maxChars: 10_000 }).adapterNote).toContain(
+      "gmail reader found nothing",
+    );
+  });
+});
+
+describe("adapter kit fit", () => {
+  const fit = () =>
+    (
+      globalThis as unknown as {
+        __yarvisAdapterKit: {
+          fit(
+            lines: string[],
+            budget: number,
+            o: { keep: string },
+          ): { kept: string[]; omitted: number };
+        };
+      }
+    ).__yarvisAdapterKit.fit;
+
+  it("keeps lines from the end that matters, in their order", () => {
+    expect(fit()(["a1", "b2", "c3"], 6, { keep: "last" })).toEqual({
+      kept: ["b2", "c3"],
+      omitted: 1,
+    });
+    expect(fit()(["a1", "b2", "c3"], 6, { keep: "first" })).toEqual({
+      kept: ["a1", "b2"],
+      omitted: 1,
+    });
+  });
+
+  it("cuts the one line that matters rather than keeping nothing", () => {
+    const { kept, omitted } = fit()(["old", "x".repeat(500)], 100, { keep: "last" });
+    expect(kept).toHaveLength(1);
+    expect(kept[0]).toEndWith("… (cut)");
+    expect((kept[0] as string).length).toBeLessThanOrEqual(100);
+    expect(omitted).toBe(1);
   });
 });
 

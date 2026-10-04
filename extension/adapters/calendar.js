@@ -23,14 +23,14 @@
   function readPage({ maxChars }) {
     const chips = [...document.querySelectorAll(EVENT)];
     if (chips.length === 0) return null;
-    // A multi-day event has a chip per day; once is enough.
+    // A multi-day event has a chip per day; the first one describes it.
     const seen = new Set();
     const lines = [];
     for (const chip of chips) {
+      const id = chip.getAttribute("data-eventid");
       const line = describe(chip);
-      const key = `${chip.getAttribute("data-eventid")}|${line}`;
-      if (!line || seen.has(key)) continue;
-      seen.add(key);
+      if (!line || seen.has(id)) continue;
+      seen.add(id);
       lines.push(`- ${line}`);
     }
     if (lines.length === 0) return null;

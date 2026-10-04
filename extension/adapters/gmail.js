@@ -31,12 +31,19 @@
 
   const SNIPPET_CHARS = 140;
 
+  // Gmail keeps views it has left in the page, hidden, so only what is on screen
+  // counts: otherwise a thread you went back from reads as the one that is open.
+  function shown(el) {
+    const rect = el?.getBoundingClientRect();
+    return Boolean(rect && rect.width > 0 && rect.height > 0);
+  }
+
   /** The mailbox or label being shown, from "Inbox (12) - you@example.com - Mail". */
   const viewName = () => clean(document.title.split(" - ")[0]);
 
   function readMailbox(maxChars) {
     const main = first(document, MAIN) ?? document;
-    const rows = all(main, ROW);
+    const rows = all(main, ROW).filter(shown);
     if (rows.length === 0) return null;
     const lines = rows.map((row) => {
       const senders = [...row.querySelectorAll(SENDERS)]
@@ -65,9 +72,10 @@
   }
 
   function readConversation(maxChars) {
-    const subject = text(first(document, THREAD_SUBJECT));
+    const heading = all(document, THREAD_SUBJECT).find(shown);
+    const subject = text(heading);
     if (!subject) return null;
-    const messages = all(first(document, MAIN) ?? document, MESSAGE);
+    const messages = all(first(document, MAIN) ?? document, MESSAGE).filter(shown);
     const lines = messages.map((message) => {
       const senderEl = first(message, SENDER);
       const sender = clean(
@@ -95,5 +103,10 @@
     return readConversation(maxChars) ?? readMailbox(maxChars);
   }
 
-  register({ name: "gmail", matches: (loc) => loc.hostname === "mail.google.com", readPage });
+  register({
+    name: "gmail",
+    matches: (loc) => loc.hostname === "mail.google.com",
+    readPage,
+    title: viewName,
+  });
 })();

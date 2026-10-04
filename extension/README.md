@@ -85,9 +85,11 @@ return, never what they may do (`kit.js` holds what they share):
   messages. A conversation is opened by navigating to `#all/<id>`, not by
   clicking its row, since subjects often contain words the click screens refuse.
 - **Google Calendar** reads the events in view as one line each, from the
-  description each event carries for screen readers. Slack's markup isn't a public interface, so
-when the adapter finds nothing it recognises the tools fall back to the generic
-behaviour and the result carries an `adapterNote` saying so.
+  description each event carries for screen readers.
+
+None of these sites' markup is a public interface, so when an adapter finds
+nothing it recognises the tools fall back to the generic behaviour and the
+result carries an `adapterNote` saying so.
 
 The code that runs inside the page lives in `extension/page.js`, injected with
 the adapters before each command.

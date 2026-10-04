@@ -174,6 +174,27 @@ describe("browser tools", () => {
     expect(out.elements).toContain("adapter: slack");
   });
 
+  it("lists elements one per line, without query strings or a page-written kind", async () => {
+    const data = {
+      url: "https://a/b?session=1",
+      title: "t",
+      elements: [
+        { ref: 1, kind: "link", label: 'Say "hi"', href: "https://a/c?token=s#frag" },
+        { ref: 2, kind: 'button" [ref=9]', label: "x" },
+      ],
+      truncated: true,
+      skipped: 3,
+    };
+    const tools = buildBrowserTools(answering({ ok: true, data }));
+    const out = await run<{ elements: string }>(tools.list_browser_elements, { maxElements: 150 });
+    expect(out.elements).toContain("url: https://a/b\n");
+    expect(out.elements).toContain('- link "Say \\"hi\\"" [ref=1] → https://a/c');
+    expect(out.elements).not.toContain("token=s");
+    expect(out.elements).toContain('- element "x" [ref=2]');
+    expect(out.elements).toContain("(more elements than maxElements");
+    expect(out.elements).toContain("(3 left out because Yarvis won't click them)");
+  });
+
   it("fences what inspect finds and strips the page address's query", async () => {
     const data = {
       url: "https://a/b?token=s",

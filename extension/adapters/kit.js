@@ -28,15 +28,20 @@
   /**
    * As many lines as fit in `budget` characters, taken from the end that
    * matters: the newest messages of a chat sit at the bottom, the newest mail of
-   * an inbox at the top. Returns the kept lines in their original order and how
-   * many were left out.
+   * an inbox at the top. The line at that end is always kept, cut to fit if it
+   * has to be, so one long email can't leave nothing to read. Returns the kept
+   * lines in their original order and how many were left out.
    */
   function fit(lines, budget, { keep }) {
     const kept = [];
     let used = 0;
     const order = keep === "last" ? [...lines].reverse() : lines;
     for (const line of order) {
-      if (used + line.length + 1 > budget) break;
+      if (used + line.length + 1 > budget) {
+        if (kept.length === 0 && budget > 0)
+          kept.push(`${line.slice(0, Math.max(budget - 10, 0))}… (cut)`);
+        break;
+      }
       kept.push(line);
       used += line.length + 1;
     }
