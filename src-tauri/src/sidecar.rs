@@ -242,7 +242,7 @@ async fn supervise(app: AppHandle, port: u16, token: String, restart: Arc<Notify
 }
 
 fn build_command(app: &AppHandle, port: u16, token: &str) -> Command {
-    let mut cmd = command_base();
+    let mut cmd = command_base(app);
     cmd.env("YARVIS_SIDECAR_PORT", port.to_string());
     cmd.env("YARVIS_SIDECAR_TOKEN", token);
     cmd.env(
@@ -377,7 +377,7 @@ fn build_command(app: &AppHandle, port: u16, token: &str) -> Command {
 }
 
 #[cfg(debug_assertions)]
-fn command_base() -> Command {
+fn command_base(_app: &AppHandle) -> Command {
     // Dev: run the TypeScript entrypoint directly with Bun (no build step).
     let entry = concat!(env!("CARGO_MANIFEST_DIR"), "/../sidecar/src/server.ts");
     let mut cmd = Command::new("bun");
@@ -386,11 +386,30 @@ fn command_base() -> Command {
 }
 
 #[cfg(not(debug_assertions))]
-fn command_base() -> Command {
-    // Production: run the compiled sidecar binary bundled via `externalBin`.
-    // TODO(packaging): resolve the bundled binary path from resources and apply
-    // the Bun `extractFromBunfs` workaround for the Agent SDK's embedded CLI.
-    Command::new("yarvis-sidecar")
+fn command_base(app: &AppHandle) -> Command {
+    // Production: the binary `bun run sidecar:compile` builds, which
+    // `tauri.release.conf.json` bundles via `externalBin`. Tauri places it
+    // beside the app's own executable.
+    let name = format!("yarvis-sidecar{}", std::env::consts::EXE_SUFFIX);
+    let bin = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join(&name)))
+        .unwrap_or_else(|| PathBuf::from(&name));
+    let mut cmd = Command::new(bin);
+
+    // The compiled binary has no checkout to find its migrations in, so they
+    // ship as a bundle resource.
+    match app.path().resource_dir() {
+        Ok(dir) => {
+            cmd.env("YARVIS_MIGRATIONS_DIR", dir.join("drizzle"));
+        }
+        Err(e) => eprintln!("[sidecar] no resource dir, so no migrations: {e}"),
+    }
+
+    if let Some(path) = crate::login_path::get() {
+        cmd.env("PATH", path);
+    }
+    cmd
 }
 
 /// The log file the frontend offers to reveal, so a user chasing a failure can

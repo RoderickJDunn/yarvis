@@ -38,4 +38,10 @@ export default defineConfig(async () => ({
       ignored: ["**/src-tauri/**", "**/.git/**", "**/.worktrees/**"],
     },
   },
+  // `bun run tauri:preview` serves the production build here, where the app
+  // window and the sidecar's allowed origins already expect the dev server.
+  preview: {
+    port,
+    strictPort: true,
+  },
 }));
