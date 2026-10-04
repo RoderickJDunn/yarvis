@@ -166,8 +166,14 @@ async function activeTabId() {
   return tab.id;
 }
 
-/** Site adapters first, so page.js finds them when it loads. */
-const PAGE_FILES = ["adapters/slack.js", "page.js"];
+/** The adapter kit, then the site adapters, then page.js, which finds them when it loads. */
+const PAGE_FILES = [
+  "adapters/kit.js",
+  "adapters/slack.js",
+  "adapters/gmail.js",
+  "adapters/calendar.js",
+  "page.js",
+];
 
 const SCREENS = { blockedSource: BLOCKED_LABEL_SOURCE, blockedPathSource: BLOCKED_PATH_SOURCE };
 

@@ -11,6 +11,8 @@
 // generic behaviour and say so.
 
 (() => {
+  const { clean, text, first, all, fit, register } = globalThis.__yarvisAdapterKit;
+
   const MESSAGE = ['[data-qa="message_container"]', ".c-message_kit__message"];
   const SENDER = [
     '[data-qa="message_sender_name"]',
@@ -32,25 +34,6 @@
   const CONVERSATION_ID = /^[CDG][A-Z0-9]{6,}$/;
   // T for a workspace, E for an Enterprise Grid org.
   const ID_IN_ADDRESS = /\/(?:archives|client\/[TE][A-Z0-9]+)\/([CDG][A-Z0-9]{6,})/;
-
-  const clean = (text) => (text ?? "").replace(/\s+/g, " ").trim();
-  const text = (el) => clean(el?.innerText ?? el?.textContent);
-
-  function first(root, selectors) {
-    for (const selector of selectors) {
-      const found = root.querySelector(selector);
-      if (found) return found;
-    }
-    return null;
-  }
-
-  function all(root, selectors) {
-    for (const selector of selectors) {
-      const found = root.querySelectorAll(selector);
-      if (found.length > 0) return [...found];
-    }
-    return [];
-  }
 
   function conversationName() {
     const header = text(first(document, HEADER));
@@ -95,19 +78,11 @@
     if (lines.length === 0) return null;
 
     const header = `Conversation: ${conversationName()}\n`;
-    const kept = [];
-    let used = header.length;
-    for (let i = lines.length - 1; i >= 0; i--) {
-      const line = lines[i];
-      if (used + line.length + 1 > maxChars) break;
-      kept.unshift(line);
-      used += line.length + 1;
-    }
-    const truncated = kept.length < lines.length;
-    const note = truncated
-      ? `Older loaded messages were left out to fit; ${lines.length - kept.length} more above.\n`
+    const { kept, omitted } = fit(lines, maxChars - header.length - 120, { keep: "last" });
+    const note = omitted
+      ? `Older loaded messages were left out to fit; ${omitted} more above.\n`
       : "Only the messages Slack has loaded are here; scroll the message list up for older ones.\n";
-    return { text: `${header}${note}\n${kept.join("\n")}`, truncated };
+    return { text: `${header}${note}\n${kept.join("\n")}`, truncated: omitted > 0 };
   }
 
   /** The conversation a sidebar row opens, from an attribute on it or a link inside it. */
@@ -140,8 +115,5 @@
     loc.hostname === "app.slack.com" ||
     (loc.hostname.endsWith(".slack.com") && /^\/(?:client|archives)\//.test(loc.pathname));
 
-  // Own property only, like page.js reads it: a page element with this id would
-  // otherwise show up on window as a named property and be written into.
-  if (!Object.hasOwn(globalThis, "__yarvisAdapters")) globalThis.__yarvisAdapters = {};
-  globalThis.__yarvisAdapters.slack = { name: "slack", matches, readPage, describeElement };
+  register({ name: "slack", matches, readPage, describeElement });
 })();

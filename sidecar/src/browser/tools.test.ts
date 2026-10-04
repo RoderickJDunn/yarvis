@@ -168,8 +168,10 @@ describe("browser tools", () => {
     };
     const tools = buildBrowserTools(answering({ ok: true, data }));
     const out = await run<{ elements: string }>(tools.list_browser_elements, { maxElements: 150 });
-    expect(out.elements).toContain('"channelId":"C0ABC1234"');
-    expect(out.elements).toContain('"adapter":"slack"');
+    expect(out.elements).toContain(
+      '- treeitem "agentic-intake" [ref=1] channelId=C0ABC1234 openUrl=https://app.slack.com/client/T1/C0ABC1234',
+    );
+    expect(out.elements).toContain("adapter: slack");
   });
 
   it("fences what inspect finds and strips the page address's query", async () => {

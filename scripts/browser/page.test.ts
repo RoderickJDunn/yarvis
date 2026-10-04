@@ -35,7 +35,10 @@ const originalRect = Element.prototype.getBoundingClientRect;
 const originalFromPoint = document.elementFromPoint;
 
 beforeAll(async () => {
+  await import("../../extension/adapters/kit.js");
   await import("../../extension/adapters/slack.js");
+  await import("../../extension/adapters/gmail.js");
+  await import("../../extension/adapters/calendar.js");
   await import("../../extension/page.js");
 });
 
@@ -402,5 +405,92 @@ describe("Slack readPage", () => {
     const out = page().readPage({ maxChars: 10_000 });
     expect(out.adapter).toBeUndefined();
     expect(out.adapterNote).toBeUndefined();
+  });
+});
+
+describe("Gmail readPage", () => {
+  beforeEach(() => {
+    happy().setURL("https://mail.google.com/mail/u/0/#inbox");
+    document.title = "Inbox (2) - you@example.com - Mail";
+  });
+
+  it("lists conversations with unread marks and ids, newest first", () => {
+    document.body.innerHTML = `
+      <div role="main"><table><tbody>
+        <tr class="zA zE">
+          <td class="yX"><span class="yP" name="Max Jedrzejewski">Max</span></td>
+          <td><span class="bog"><span data-legacy-thread-id="18c4f0a1b2">Forecast app V1</span></span>
+              <span class="y2"> - Can we ship Friday?</span></td>
+          <td class="xW"><span title="Fri, Oct 2, 2026, 4:10 PM">Oct 2</span></td>
+        </tr>
+        <tr class="zA">
+          <td class="yX"><span class="zF" name="Rob Klomps">Rob</span></td>
+          <td><span class="bog"><span data-legacy-thread-id="18c4e99999">Accepted: Standup</span></span></td>
+          <td class="xW"><span title="Thu, Oct 1, 2026, 9:00 AM">Oct 1</span></td>
+        </tr>
+      </tbody></table></div>`;
+    const out = page().readPage({ maxChars: 10_000 });
+
+    expect(out.adapter).toBe("gmail");
+    expect(out.text).toContain("Mailbox: Inbox (2)");
+    expect(out.text).toContain("https://mail.google.com/mail/u/0/#all/<id>");
+    expect(out.text).toContain(
+      "● Fri, Oct 2, 2026, 4:10 PM · Max Jedrzejewski — Forecast app V1 — Can we ship Friday? [id 18c4f0a1b2]",
+    );
+    expect(out.text).toContain(
+      "Thu, Oct 1, 2026, 9:00 AM · Rob Klomps — Accepted: Standup [id 18c4e99999]",
+    );
+    expect(out.text).not.toContain("you@example.com");
+  });
+
+  it("reads an open conversation, keeping the latest messages when they don't fit", () => {
+    document.body.innerHTML = `
+      <div role="main">
+        <h2 class="hP">Forecast app V1</h2>
+        ${Array.from(
+          { length: 30 },
+          (_, i) => `
+          <div class="adn">
+            <span class="gD" name="Max" email="max@example.com">Max</span>
+            <span class="g3" title="Oct ${i + 1}, 2026">Oct ${i + 1}</span>
+            <div class="a3s">reply number ${i} ${"x".repeat(60)}</div>
+          </div>`,
+        ).join("")}
+        <div class="adn"><span class="gD" name="Rob">Rob</span></div>
+      </div>`;
+    const out = page().readPage({ maxChars: 1_000 });
+
+    expect(out.text).toContain("Conversation: Forecast app V1");
+    expect(out.text).toContain("Max <max@example.com>:");
+    expect(out.text).toContain("Rob:\n(collapsed; open it to read)");
+    expect(out.text).toContain("reply number 29");
+    expect(out.text).not.toContain("reply number 0 ");
+    expect(out.truncated).toBe(true);
+  });
+});
+
+describe("Calendar readPage", () => {
+  beforeEach(() => {
+    happy().setURL("https://calendar.google.com/calendar/u/0/r/week");
+    document.title = "Google Calendar - Week of October 4, 2026";
+  });
+
+  it("lists each event once, from its screen-reader description", () => {
+    document.body.innerHTML = `
+      <div role="button" data-eventid="a1"><div class="XuJrye">10am to 11am, Standup, Accepted, October 5, 2026</div>Standup</div>
+      <div role="button" data-eventid="b2" aria-label="All day, Offsite, October 6, 2026"></div>
+      <div role="button" data-eventid="b2" aria-label="All day, Offsite, October 6, 2026"></div>`;
+    const out = page().readPage({ maxChars: 10_000 });
+
+    expect(out.adapter).toBe("calendar");
+    expect(out.text).toBe(
+      "Calendar: Week of October 4, 2026\nEvents in view, in page order:\n- 10am to 11am, Standup, Accepted, October 5, 2026\n- All day, Offsite, October 6, 2026",
+    );
+  });
+
+  it("falls back when there are no events in view", () => {
+    document.body.innerHTML = `<main>Nothing scheduled</main>`;
+    const out = page().readPage({ maxChars: 10_000 });
+    expect(out.adapterNote).toContain("calendar reader found nothing");
   });
 });

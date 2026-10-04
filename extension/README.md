@@ -76,9 +76,16 @@ chosen, the same screens below apply to what the click really lands on.
 ### Site adapters
 
 `extension/adapters/` holds per-site code that changes what the same tools
-return, never what they may do. Slack's (`adapters/slack.js`) turns
-`read_browser_page` into a message transcript and tags sidebar conversations
-with a `channelId` and an `openUrl`. Slack's markup isn't a public interface, so
+return, never what they may do (`kit.js` holds what they share):
+
+- **Slack** turns `read_browser_page` into a message transcript (newest kept) and
+  tags sidebar conversations with a `channelId` and an `openUrl`.
+- **Gmail** reads a mailbox as one line per conversation (unread mark, time,
+  sender, subject, snippet, thread id), and an open conversation as its
+  messages. A conversation is opened by navigating to `#all/<id>`, not by
+  clicking its row, since subjects often contain words the click screens refuse.
+- **Google Calendar** reads the events in view as one line each, from the
+  description each event carries for screen readers. Slack's markup isn't a public interface, so
 when the adapter finds nothing it recognises the tools fall back to the generic
 behaviour and the result carries an `adapterNote` saying so.
 

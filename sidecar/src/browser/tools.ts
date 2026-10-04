@@ -104,6 +104,37 @@ function withoutQuery(url: string): string {
   return cut === -1 ? url : url.slice(0, cut);
 }
 
+/** A shape that already wrote its own text is passed through; anything else is JSON. */
+function asText(shaped: unknown): string {
+  return typeof shaped === "string" ? shaped : JSON.stringify(shaped);
+}
+
+/**
+ * A listing as one line per element, the layout accessibility-tree snapshots
+ * use: `- treeitem "agentic-intake" [ref=24] channelId=C0…`. The same elements as
+ * JSON cost nearly three times the tokens, almost all of it repeated keys.
+ */
+function elementLines(page: z.infer<typeof elementsSchema>): string {
+  const head = [
+    `url: ${withoutQuery(page.url)}`,
+    `title: ${page.title}`,
+    ...(page.adapter ? [`adapter: ${page.adapter}`] : []),
+  ];
+  const lines = page.elements.map((el) => {
+    const extras = [
+      el.href ? `→ ${withoutQuery(el.href)}` : "",
+      el.channelId ? `channelId=${el.channelId}` : "",
+      el.openUrl ? `openUrl=${el.openUrl}` : "",
+    ].filter(Boolean);
+    return `- ${el.kind} ${JSON.stringify(el.label)} [ref=${el.ref}]${extras.length ? ` ${extras.join(" ")}` : ""}`;
+  });
+  const tail = [
+    ...(page.truncated ? ["(more elements than maxElements; narrow with text or selector)"] : []),
+    ...(page.skipped ? [`(${page.skipped} left out because Yarvis won't click them)`] : []),
+  ];
+  return [...head, ...lines, ...tail].join("\n");
+}
+
 function withCleanUrl<T extends { url: string }>(state: T): T {
   return { ...state, url: withoutQuery(state.url) };
 }
@@ -142,7 +173,7 @@ export function buildBrowserTools(bridge: BrowserBridge = browserBridge) {
     const nonce = newNonce();
     return {
       notice: untrustedWarning(nonce, tag),
-      [tag.replace("browser-", "")]: fence(JSON.stringify(shape(parsed.data)), nonce, tag),
+      [tag.replace("browser-", "")]: fence(asText(shape(parsed.data)), nonce, tag),
     };
   }
 
@@ -252,14 +283,7 @@ export function buildBrowserTools(bridge: BrowserBridge = browserBridge) {
           elementsSchema,
           "browser-elements",
           // Query strings carry session tokens, and a ref is all a click needs.
-          (page) => ({
-            ...page,
-            url: withoutQuery(page.url),
-            elements: page.elements.map((el) => ({
-              ...el,
-              href: el.href && withoutQuery(el.href),
-            })),
-          }),
+          elementLines,
         ),
     }),
     inspect_browser_page: tool({
