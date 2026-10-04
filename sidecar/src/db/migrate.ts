@@ -5,7 +5,7 @@ import { loadConfig } from "../config.ts";
 
 /**
  * A packaged sidecar is a single compiled binary with no checkout around it, so
- * the app passes in the migrations it bundles as a resource.
+ * the app points `YARVIS_MIGRATIONS_DIR` at the copy it bundles as a resource.
  */
 function migrationsFolder(): string {
   return process.env.YARVIS_MIGRATIONS_DIR || `${import.meta.dir}/../../drizzle`;

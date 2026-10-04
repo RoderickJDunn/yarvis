@@ -59,6 +59,9 @@ if (import.meta.main) {
     "--outfile",
     outfile(triple),
   ];
-  const result = spawnSync("bun", args, { stdio: "inherit" });
+  // The Bun running this script is the runtime the binary embeds, not whichever
+  // `bun` comes first on PATH.
+  const result = spawnSync(process.execPath, args, { stdio: "inherit" });
+  if (result.error) console.error(result.error);
   process.exit(result.status ?? 1);
 }
