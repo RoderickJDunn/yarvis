@@ -20,14 +20,24 @@ export function instancesDir(): string {
   );
 }
 
-/** Null for anything that isn't a usable entry, so one bad file can't stop the rest. */
+/** What the sidecar mints (`randomToken` in sidecar/src/browser/bridge.ts): 32 random bytes as hex. */
+const TOKEN = /^[0-9a-f]{64}$/;
+
+/**
+ * Null for anything that isn't a usable entry, so one bad file can't stop the
+ * rest. The host sends `token` in an Authorization header to `port` on
+ * 127.0.0.1, so both are held to exactly what a sidecar writes: a token of any
+ * other shape could carry extra header text, and a privileged port is never one
+ * a sidecar was given.
+ */
 export function parseInstance(value: unknown): Instance | null {
   const entry = value as Partial<Instance> | null;
   if (
     typeof entry?.name !== "string" ||
     typeof entry.token !== "string" ||
+    !TOKEN.test(entry.token) ||
     !Number.isInteger(entry.port) ||
-    (entry.port as number) <= 0 ||
+    (entry.port as number) < 1024 ||
     (entry.port as number) >= 65536 ||
     !Number.isInteger(entry.pid) ||
     (entry.pid as number) <= 0
@@ -35,9 +45,20 @@ export function parseInstance(value: unknown): Instance | null {
     return null;
   }
   return {
-    name: entry.name,
+    name: entry.name.slice(0, 64),
     port: entry.port as number,
     token: entry.token,
     pid: entry.pid as number,
   };
+}
+
+/**
+ * Whether a discovery file (or the folder holding it) can be trusted to point
+ * the host somewhere: it must belong to this user and be writable by no one
+ * else. Otherwise another account on the machine could plant a file that sends
+ * the extension's page reads to a port it is listening on. The sidecar creates
+ * the folder 0700 and each file 0600.
+ */
+export function ownedByMe(stat: { uid: number; mode: number }, myUid: number): boolean {
+  return stat.uid === myUid && (stat.mode & 0o022) === 0;
 }

@@ -9,10 +9,10 @@
  * never sees a sidecar's port or token — both come from the discovery files each
  * sidecar writes on launch.
  */
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { encodeFrame, FrameDecoder } from "./frames.ts";
-import { type Instance, instancesDir, parseInstance } from "./instances.ts";
+import { type Instance, instancesDir, ownedByMe, parseInstance } from "./instances.ts";
 
 const RETRY_MS = 3_000;
 const RESCAN_MS = 3_000;
@@ -152,9 +152,13 @@ function alive(pid: number): boolean {
 
 async function rescan(): Promise<void> {
   const dir = instancesDir();
+  const me = process.getuid?.() ?? -1;
   let files: string[] = [];
   try {
-    files = (await readdir(dir)).filter((file) => file.endsWith(".json"));
+    // A folder someone else can write into could hold their file; read nothing from it.
+    if (ownedByMe(await stat(dir), me)) {
+      files = (await readdir(dir)).filter((file) => file.endsWith(".json"));
+    }
   } catch {
     // No instance has started yet.
   }
@@ -163,7 +167,10 @@ async function rescan(): Promise<void> {
   for (const file of files) {
     let instance: Instance | null = null;
     try {
-      instance = parseInstance(JSON.parse(await readFile(join(dir, file), "utf8")));
+      const path = join(dir, file);
+      if (ownedByMe(await stat(path), me)) {
+        instance = parseInstance(JSON.parse(await readFile(path, "utf8")));
+      }
     } catch {
       // Half-written or not ours; the next scan will see it whole.
     }
