@@ -59,11 +59,11 @@ HTTP API into Postgres, exactly as in the app. These are faked:
   being written. A reply can call one of the sidecar's tools, which then runs
   for real: the chat flow's `create_task` call puts a real task on the list.
   PR line questions and guided reviews use it too, through the `prModels`
-  setting, and so does the `standup-writer` specialist the stack writes for
-  scheduled jobs. A job on the default agent would use the default chat
-  model, which is a real provider when the runner passes a key through. It also answers the OpenAI audio endpoints, so it can back voice:
-  every recording transcribes to `VOICE_TRANSCRIPT` in `script.ts`, and spoken
-  replies come back as silence. The voice flow records Chromium's fake
+  setting, and so does the `standup-writer` specialist the stack writes for the
+  scheduled-jobs flow, so a job never falls back to a real provider. It also
+  answers the OpenAI audio endpoints, so it can back voice: every recording
+  transcribes to `VOICE_TRANSCRIPT` in `script.ts`, and spoken replies come
+  back as silence. The voice flow records Chromium's fake
   microphone.
 - **GitHub, Google Calendar and JIRA** are `fakeGithub/`, `fakeGoogle/` and
   `fakeJira/`, local servers the sidecar reaches through its `YARVIS_GITHUB_*`,

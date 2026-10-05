@@ -19,7 +19,7 @@ test("scheduled jobs", async ({ demo, page }) => {
     { delay: 25 },
   );
   // Agent stays on Yarvis; the specialist runs on the fake model.
-  const specialist = page.getByRole("combobox").filter({ hasText: "Default agent" });
+  const specialist = page.getByRole("combobox", { name: "Specialist" });
   await demo.hover(specialist);
   await specialist.selectOption(DEMO_SPECIALIST);
   await expect(specialist).toHaveValue(DEMO_SPECIALIST);
@@ -35,7 +35,7 @@ test("scheduled jobs", async ({ demo, page }) => {
   // The newest run is the only one; its row opens to show what the agent wrote.
   const run = page.getByRole("button", { name: /^ok\b/ });
   await demo.click(run);
-  const output = page.getByText("Review Priya's payment-step PR (#477)");
+  const output = page.getByText("code complete is this week's goal");
   await expect(output).toBeVisible();
   // The output opens below the fold.
   await output.evaluate((el) => el.scrollIntoView({ block: "center" }));

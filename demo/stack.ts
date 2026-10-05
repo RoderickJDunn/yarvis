@@ -99,7 +99,7 @@ function writeFakeProvider(settingsPath: string, fakeLlmUrl: string): void {
   );
 }
 
-/** The specialist the scheduled-jobs flow runs. Its file name is what the Specialist picker shows. */
+/** The specialist the scheduled-jobs flow runs, by the `name:` the Specialist picker lists. */
 export const DEMO_SPECIALIST = "standup-writer";
 
 /**

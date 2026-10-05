@@ -66,25 +66,25 @@ function addElement(key: string, type: string, props: object, children: string[]
 }
 
 export const REPLIES: Reply[] = [
-  // The scheduled-jobs flow's prompt. It reads the task list, then drafts.
+  // The scheduled-jobs flow's prompt. It reads the task list, then drafts from
+  // the seeded tasks. No later pattern matches it.
   {
     when: /standup update/i,
     toolCall: { name: "list_tasks", args: {} },
     after: [
       "**Yesterday**",
-      "- Put the new payment step behind the `checkout-v2` flag",
+      "- Kept going on the payment step (code complete is this week's goal)",
       "",
       "**Today**",
       "- Prep demo for Thursday's review",
       "- Reply to the design feedback thread",
-      "- Review Priya's payment-step PR (#477), due tomorrow",
       "",
       "**Blockers**",
       "- None",
     ].join("\n"),
   },
-  // A PR line question. First, because its prompt says "a reviewer is looking
-  // at lines…", which the screen-summary reply below would also match.
+  // A PR line question. Ahead of the screen-summary reply, because its prompt
+  // says "a reviewer is looking at lines…", which that reply also matches.
   {
     when: /Their question: .*lazy/i,
     text: [
