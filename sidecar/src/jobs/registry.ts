@@ -1,5 +1,4 @@
 import type { Db } from "../db/client.ts";
-import { githubReviewSyncJob } from "../github/reviewSync.ts";
 import {
   getAgentJob,
   jobIdFromSchedulerName,
@@ -8,6 +7,7 @@ import {
 } from "./agentJobs.ts";
 import { ccSessionDigestJob } from "./ccSessions.ts";
 import { consolidationJobs } from "./consolidate.ts";
+import { githubReviewSyncJob } from "./githubReviewSync.ts";
 import type { JobDefinition } from "./scheduler.ts";
 
 /**

@@ -946,6 +946,7 @@ export const events = pgTable(
     index("events_type_idx").on(t.type),
     // The events browser pages the whole log newest-first, with no type filter.
     index("events_occurred_idx").on(t.occurredAt),
+    // Drops a second report of the same provider action. NULLs never conflict.
     uniqueIndex("events_external_id_idx").on(t.externalId),
   ],
 );

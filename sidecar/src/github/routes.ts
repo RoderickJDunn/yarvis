@@ -5,10 +5,9 @@ import { getDb } from "../db/client.ts";
 import { emitEvent } from "../events/service.ts";
 import { retireGuide } from "../pr/guides.ts";
 import { refKey } from "../pr/types.ts";
-import { GitHubClient } from "./client.ts";
+import { GitHubClient, reviewExternalId } from "./client.ts";
 import { getGithubPrConfig, saveGithubPrConfig } from "./config.ts";
 import { getReviewingList } from "./reviewing.ts";
-import { reviewExternalId } from "./reviewSync.ts";
 import {
   addStar,
   createFilter,
