@@ -1,4 +1,5 @@
 import type { Db } from "../db/client.ts";
+import { githubReviewSyncJob } from "../github/reviewSync.ts";
 import {
   getAgentJob,
   jobIdFromSchedulerName,
@@ -13,10 +14,11 @@ import type { JobDefinition } from "./scheduler.ts";
  * Every background job, in the order a tick considers them. Order matters where
  * one job's output is another's input: the session digests are written before the
  * day rollup that folds them in, and both are cheap enough that running them in
- * one tick is fine.
+ * one tick is fine. The GitHub review sync goes first so the reviews it logs are
+ * in the log before consolidation reads it.
  */
 export function allJobs(): JobDefinition[] {
-  return [ccSessionDigestJob, ...consolidationJobs];
+  return [githubReviewSyncJob, ccSessionDigestJob, ...consolidationJobs];
 }
 
 export function findJob(name: string): JobDefinition | undefined {

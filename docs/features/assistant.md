@@ -174,8 +174,10 @@ Yarvis records meaningful actions as events. Examples:
 - calendar events booked,
 - the assistant's own todos and projects.
 
-Clicking around the UI is not an event. The log only records what you do *in
-Yarvis*, so a PR you review on github.com doesn't show up.
+Clicking around the UI is not an event. The log mostly records what you do *in
+Yarvis*. The one exception is review verdicts: approvals and change requests you
+give on github.com are copied in every 30 minutes by the GitHub review sync
+(source `github-sync`). Comments you leave on github.com still don't show up.
 
 Browse and search it under **Memory → Activity**.
 
@@ -203,7 +205,8 @@ memory. It does not watch your terminals.
 - terminal output, or a session's live transcript,
 - whether an instruction it sent was carried out,
 - the attention bell (a session waiting on a prompt),
-- PRs you reviewed on github.com rather than in Yarvis.
+- comments you left on github.com rather than in Yarvis. Approvals and change
+  requests given there reach the activity log within 30 minutes.
 
 Two ways to close the gap during the day:
 
@@ -362,9 +365,9 @@ act on them.
 
 ## Background jobs
 
-Three jobs ship with the app and keep memory up to date: a summary of recent
-activity every 4 hours, the transcript digest at 02:00 (if on), and a daily
-rollup at 03:00. Their status and a **Run now** button are under **Settings →
+Four jobs ship with the app and keep memory up to date: a sync of the reviews
+you gave on github.com every 30 minutes, a summary of recent activity every 4
+hours, the transcript digest at 02:00 (if on), and a daily rollup at 03:00. Their status and a **Run now** button are under **Settings →
 Assistant**. See [Scheduled jobs](scheduled-jobs.md#background-jobs-that-ship-with-the-app)
 for the details, and for scheduling your own prompts.
 

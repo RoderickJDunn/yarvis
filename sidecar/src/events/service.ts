@@ -104,6 +104,8 @@ export interface RecordEventInput {
   payload?: Record<string, unknown>;
   /** When the action happened; defaults to now. */
   occurredAt?: Date;
+  /** The provider's id for the action, so a second report of it is dropped. */
+  externalId?: string;
 }
 
 /** Inserts an event and returns the row. Throws on failure. */
@@ -115,9 +117,33 @@ export async function recordEvent(db: Db, input: RecordEventInput): Promise<Even
       source: input.source ?? null,
       payload: input.payload ?? null,
       occurredAt: input.occurredAt ?? new Date(),
+      externalId: input.externalId ?? null,
     })
     .returning();
   return row!;
+}
+
+/**
+ * Records an action the log may already hold, such as a review submitted in the
+ * app and then read back by the GitHub sync. Returns null when an event with the
+ * same `externalId` exists, which is the expected outcome, not a failure.
+ */
+export async function recordEventOnce(
+  db: Db,
+  input: RecordEventInput & { externalId: string },
+): Promise<EventRow | null> {
+  const [row] = await db
+    .insert(events)
+    .values({
+      type: input.type,
+      source: input.source ?? null,
+      payload: input.payload ?? null,
+      occurredAt: input.occurredAt ?? new Date(),
+      externalId: input.externalId,
+    })
+    .onConflictDoNothing({ target: events.externalId })
+    .returning();
+  return row ?? null;
 }
 
 /**
@@ -127,7 +153,8 @@ export async function recordEvent(db: Db, input: RecordEventInput): Promise<Even
  */
 export async function emitEvent(db: Db, input: RecordEventInput): Promise<void> {
   try {
-    await recordEvent(db, input);
+    if (input.externalId) await recordEventOnce(db, { ...input, externalId: input.externalId });
+    else await recordEvent(db, input);
   } catch (e) {
     console.error(
       `[events] failed to record ${input.type}:`,

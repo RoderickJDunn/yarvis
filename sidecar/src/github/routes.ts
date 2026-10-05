@@ -8,6 +8,7 @@ import { refKey } from "../pr/types.ts";
 import { GitHubClient } from "./client.ts";
 import { getGithubPrConfig, saveGithubPrConfig } from "./config.ts";
 import { getReviewingList } from "./reviewing.ts";
+import { reviewExternalId } from "./reviewSync.ts";
 import {
   addStar,
   createFilter,
@@ -291,7 +292,7 @@ export function createGithubRoutes(config: Config): Hono {
       return c.json({ error: "request changes requires a body" }, 400);
     }
     try {
-      await gh.submitReview(
+      const { nodeId } = await gh.submitReview(
         params.owner,
         params.repo,
         params.number,
@@ -311,6 +312,8 @@ export function createGithubRoutes(config: Config): Hono {
           ref: refKey({ provider: "github", ...params }),
           hasBody: Boolean(parsed.data.body?.trim()),
         },
+        // The id the GitHub review sync matches on, so it doesn't log this review again.
+        externalId: nodeId ? reviewExternalId(nodeId) : undefined,
       });
       return c.json({ ok: true }, 201);
     } catch (e) {

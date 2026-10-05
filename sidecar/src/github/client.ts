@@ -498,6 +498,70 @@ function toPrInvolvement(node: any): PrInvolvement {
   };
 }
 
+/** One review the viewer submitted, as the contributions API reports it. */
+export interface ReviewContribution {
+  /** The review's GraphQL node id. */
+  reviewId: string;
+  state: ReviewerState;
+  submittedAt: string;
+  owner: string;
+  repo: string;
+  number: number;
+  title: string;
+  url: string;
+}
+
+interface ReviewContributionsPage {
+  viewer?: {
+    contributionsCollection?: {
+      pullRequestReviewContributions?: {
+        pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
+        nodes?: any[];
+      };
+    };
+  };
+}
+
+/** Bounds one sync's requests; 100 reviews a page covers months of reviewing. */
+const MAX_CONTRIBUTION_PAGES = 5;
+
+const REVIEW_CONTRIBUTIONS_QUERY = `
+query($from:DateTime!,$to:DateTime!,$after:String){
+  viewer{
+    contributionsCollection(from:$from, to:$to){
+      pullRequestReviewContributions(first:100, after:$after){
+        pageInfo{ hasNextPage endCursor }
+        nodes{
+          occurredAt
+          pullRequestReview{ id state submittedAt }
+          pullRequest{ number title url repository{ name owner{login} } }
+        }
+      }
+    }
+  }
+}`;
+
+/** Drops a node missing the fields that identify the review or its PR. */
+function toReviewContribution(node: any): ReviewContribution | null {
+  const review = node?.pullRequestReview;
+  const pr = node?.pullRequest;
+  const owner = pr?.repository?.owner?.login;
+  const repo = pr?.repository?.name;
+  if (typeof review?.id !== "string" || typeof pr?.number !== "number" || !owner || !repo) {
+    return null;
+  }
+  return {
+    reviewId: review.id,
+    state: mapReviewState(review.state),
+    submittedAt: review.submittedAt ?? node.occurredAt ?? "",
+    owner,
+    repo,
+    number: pr.number,
+    title: pr.title ?? "",
+    url: pr.url ?? "",
+  };
+}
+
 /** Identifies one PR for the batched involvement lookup. */
 export interface PrNumberRef {
   owner: string;
@@ -1172,6 +1236,9 @@ export class GitHubClient {
    * REQUEST_CHANGES blocks it, COMMENT leaves an unbinding comment. The body
    * is optional (GitHub allows a bodyless approval but requires text on a
    * request-changes review; the caller is expected to enforce that).
+   *
+   * Resolves to the review's GraphQL node id, the same id
+   * {@link reviewContributions} reports, or null if GitHub's reply omits it.
    */
   async submitReview(
     owner: string,
@@ -1179,7 +1246,7 @@ export class GitHubClient {
     number: number,
     event: "APPROVE" | "REQUEST_CHANGES" | "COMMENT",
     body?: string,
-  ): Promise<void> {
+  ): Promise<{ nodeId: string | null }> {
     const res = await this.fetchImpl(
       `https://api.github.com/repos/${owner}/${repo}/pulls/${number}/reviews`,
       {
@@ -1194,6 +1261,31 @@ export class GitHubClient {
       },
     );
     if (!res.ok) throw new Error(`github submit review -> ${res.status}`);
+    const review = (await res.json().catch(() => null)) as { node_id?: unknown } | null;
+    return { nodeId: typeof review?.node_id === "string" ? review.node_id : null };
+  }
+
+  /**
+   * The reviews the viewer submitted between `from` and `to`, wherever they
+   * submitted them. GitHub caps one contributions window at a year.
+   */
+  async reviewContributions(from: Date, to: Date): Promise<ReviewContribution[]> {
+    const found: ReviewContribution[] = [];
+    let after: string | null = null;
+    for (let page = 0; page < MAX_CONTRIBUTION_PAGES; page++) {
+      const data: ReviewContributionsPage = await this.graphql<ReviewContributionsPage>(
+        REVIEW_CONTRIBUTIONS_QUERY,
+        { from: from.toISOString(), to: to.toISOString(), after },
+      );
+      const connection = data.viewer?.contributionsCollection?.pullRequestReviewContributions;
+      for (const node of connection?.nodes ?? []) {
+        const contribution = toReviewContribution(node);
+        if (contribution) found.push(contribution);
+      }
+      if (!connection?.pageInfo?.hasNextPage || !connection.pageInfo.endCursor) break;
+      after = connection.pageInfo.endCursor;
+    }
+    return found;
   }
 
   /**
