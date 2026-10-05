@@ -201,9 +201,10 @@ export const test = base.extend<{ demo: Demo }>({
       // Settings shows a key as stored exactly when the sidecar was given it.
       presentSecrets: [
         "database_url",
-        // The sidecar is given placeholder values for these, for the fake GitHub and Google.
+        // The sidecar is given placeholder values for these, for the fake GitHub, Google and JIRA.
         "github_token",
         "google_client_secret",
+        "jira_api_token",
         ...PASSTHROUGH_SECRETS.filter((key) => process.env[key]).map((key) => key.toLowerCase()),
       ],
     };

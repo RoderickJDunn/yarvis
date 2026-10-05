@@ -186,9 +186,10 @@ back to ad-hoc.
   the tools in `codeTools.ts` are written once and GitHub/Azure each supply an
   implementation. A capability one provider lacks resolves to `null` so the
   caller can say so, rather than throwing.
-- A GitHub or Google client is built with `createGitHubClient(config, token)` or
-  `createGoogleCalendarClient(config)`, never its constructor. The factories are
-  where the demo's endpoint overrides apply, so a bare `new GitHubClient(token)`
+- A GitHub, Google or JIRA client is built with `createGitHubClient(config, token)`,
+  `createGoogleCalendarClient(config)` or `createJiraClient(config, …)`, never its
+  constructor. The factories are where the demo's endpoint overrides apply, so a
+  bare `new GitHubClient(token)`
   would send the demo's placeholder token, or a dev's real one, to the real
   service. The overrides themselves are refused by the Rust core
   (`ENDPOINT_OVERRIDE_VARS` in `sidecar.rs`) and accepted only for loopback URLs.

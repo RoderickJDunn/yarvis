@@ -18,6 +18,8 @@ import { createServer } from "node:net";
 import { dirname, join } from "node:path";
 import { startFakeGithub } from "./fakeGithub/server";
 import { startFakeGoogle } from "./fakeGoogle/server";
+import { SITE_URL as JIRA_SITE_URL, VIEWER as JIRA_VIEWER } from "./fakeJira/data";
+import { startFakeJira } from "./fakeJira/server";
 import { FAKE_MODEL, startFakeLlm } from "./fakeLlm/server";
 import { OUTPUT_DIR, REPO_ROOT } from "./paths";
 
@@ -108,13 +110,14 @@ export interface Stack {
 const closeServers = (servers: Server[]) =>
   Promise.all(servers.map((s) => new Promise((resolve) => s.close(resolve))));
 
-/** Starts the fake model, GitHub and Google, closing any already running if one fails. */
-async function startFakes(ports: { llm: number; github: number; google: number }) {
+/** Starts the fake model, GitHub, Google and JIRA, closing any already running if one fails. */
+async function startFakes(ports: { llm: number; github: number; google: number; jira: number }) {
   const started: Server[] = [];
   try {
     started.push(await startFakeLlm(ports.llm));
     started.push(await startFakeGithub(ports.github));
     started.push(await startFakeGoogle(ports.google));
+    started.push(await startFakeJira(ports.jira));
   } catch (e) {
     await closeServers(started);
     throw e;
@@ -280,15 +283,15 @@ export async function startStack(): Promise<Stack> {
   mkdirSync(home, { recursive: true });
   mkdirSync(WORKSPACES_ROOT, { recursive: true });
 
-  const [sidecarPort, vitePort, fakeLlmPort, fakeGithubPort, fakeGooglePort] = await Promise.all(
-    Array.from({ length: 5 }, findFreePort),
-  );
+  const [sidecarPort, vitePort, fakeLlmPort, fakeGithubPort, fakeGooglePort, fakeJiraPort] =
+    await Promise.all(Array.from({ length: 6 }, findFreePort));
   const sidecarToken = randomBytes(24).toString("hex");
   const sidecarUrl = `http://127.0.0.1:${sidecarPort}`;
   const appOrigin = `http://localhost:${vitePort}`;
   const fakeLlmUrl = `http://127.0.0.1:${fakeLlmPort}`;
   const fakeGithubUrl = `http://127.0.0.1:${fakeGithubPort}`;
   const fakeGoogleUrl = `http://127.0.0.1:${fakeGooglePort}`;
+  const fakeJiraUrl = `http://127.0.0.1:${fakeJiraPort}`;
 
   const settingsPath = join(home, ".yarvis", "settings.json");
   writeFakeProvider(settingsPath, fakeLlmUrl);
@@ -299,6 +302,7 @@ export async function startStack(): Promise<Stack> {
     llm: fakeLlmPort,
     github: fakeGithubPort,
     google: fakeGooglePort,
+    jira: fakeJiraPort,
   });
 
   // Built from scratch rather than inheriting process.env, so a token or key
@@ -319,8 +323,8 @@ export async function startStack(): Promise<Stack> {
     YARVIS_SETTINGS_PATH: settingsPath,
     // The AI SDK won't send a request without a key. The fake model ignores it.
     YARVIS_CUSTOM_PROVIDER_SECRETS: JSON.stringify({ [FAKE_PROVIDER_ID]: { apiKey: "demo" } }),
-    // GitHub and Google point at the fakes. The credentials only have to be
-    // present for the sidecar to call them; the fakes ignore their values.
+    // GitHub, Google and JIRA point at the fakes. The credentials only have to
+    // be present for the sidecar to call them; the fakes ignore their values.
     GITHUB_TOKEN: "demo-github-token",
     YARVIS_GITHUB_API_URL: fakeGithubUrl,
     YARVIS_GITHUB_GRAPHQL_URL: `${fakeGithubUrl}/graphql`,
@@ -328,6 +332,11 @@ export async function startStack(): Promise<Stack> {
     GOOGLE_CLIENT_SECRET: "demo-google-secret",
     YARVIS_GOOGLE_CALENDAR_API_URL: `${fakeGoogleUrl}/calendar/v3`,
     YARVIS_GOOGLE_TOKEN_URL: `${fakeGoogleUrl}/token`,
+    // The site is what links into JIRA show; requests go to the fake.
+    JIRA_BASE_URL: JIRA_SITE_URL,
+    JIRA_EMAIL: JIRA_VIEWER.emailAddress,
+    JIRA_API_TOKEN: "demo-jira-token",
+    YARVIS_JIRA_API_URL: fakeJiraUrl,
     YARVIS_AGENTS_DIR: join(home, ".yarvis", "agents"),
     YARVIS_WORKSPACES_ROOT: WORKSPACES_ROOT,
     CLAUDE_HOME: join(home, ".claude"),

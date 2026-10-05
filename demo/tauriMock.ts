@@ -16,6 +16,7 @@ import type { Alarm } from "../src/lib/alarms";
 import type { ClipboardHistoryItem } from "../src/lib/clipboard";
 import type { Settings } from "../src/lib/settings";
 import { type DemoConfig, UNMOCKED_COMMAND_WARNING } from "./demoConfig";
+import { SITE_URL as JIRA_SITE_URL, VIEWER as JIRA_VIEWER } from "./fakeJira/data";
 import { FakeTerminals } from "./fakeShell";
 
 declare global {
@@ -70,8 +71,9 @@ let settings: Settings = {
   defaultAgentCommand: "claude --permission-mode auto",
   agentCommandOverriddenByEnv: false,
   azureDevopsOrgUrl: null,
-  jiraBaseUrl: null,
-  jiraEmail: null,
+  // What the sidecar was started with (demo/stack.ts), so Settings agrees.
+  jiraBaseUrl: JIRA_SITE_URL,
+  jiraEmail: JIRA_VIEWER.emailAddress,
   googleClientId: config.googleClientId,
   telegramOtpWindowMinutes: null,
   defaultTelegramOtpWindowMinutes: 120,
