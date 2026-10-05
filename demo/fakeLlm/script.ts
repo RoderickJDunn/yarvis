@@ -66,6 +66,18 @@ function addElement(key: string, type: string, props: object, children: string[]
 }
 
 export const REPLIES: Reply[] = [
+  // A PR line question. First, because its prompt says "a reviewer is looking
+  // at lines…", which the screen-summary reply below would also match.
+  {
+    when: /Their question: .*lazy/i,
+    text: [
+      "It keeps the card form out of the first paint for returning customers.",
+      "",
+      "`CardForm` pulls in the card-entry bundle, and most people on this step already have a saved card. With `lazy()` and the `Suspense` boundary below it, `SavedCards` renders straight away and the form loads behind `CardFormSkeleton`.",
+      "",
+      "One gap: a customer with **no saved cards** now waits on the lazy import before they can type anything. Prefetching `./CardForm` when `cards` comes back empty would close it.",
+    ].join("\n"),
+  },
   {
     when: /plate|this week|what.*(on|do) i/i,
     text: [

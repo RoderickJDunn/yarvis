@@ -26,8 +26,8 @@ const STATE_DIR = join(OUTPUT_DIR, ".state");
  * The app shows a workspace's full path, so workspaces live somewhere that
  * doesn't reveal the developer's username or folder layout.
  */
-const DEMO_TMP = "/tmp/yarvis-demo";
-const WORKSPACES_ROOT = join(DEMO_TMP, "workspaces");
+export const DEMO_TMP = "/tmp/yarvis-demo";
+export const WORKSPACES_ROOT = join(DEMO_TMP, "workspaces");
 
 /**
  * Makes `/tmp/yarvis-demo` ours before anything under it is deleted. Any local
@@ -64,6 +64,9 @@ export const DEMO_GOOGLE_CLIENT_ID = "123456789012-demo.apps.googleusercontent.c
 /**
  * Registers the fake model as a custom provider, written straight into the
  * sidecar's settings file the way its own custom-provider routes store one.
+ * PR line questions and guided reviews pick their model on the sidecar, not
+ * from the page, so they're pinned to it too: otherwise a provider key passed
+ * through from the runner's env would send them to a real model.
  */
 function writeFakeProvider(settingsPath: string, fakeLlmUrl: string): void {
   const now = new Date().toISOString();
@@ -77,10 +80,18 @@ function writeFakeProvider(settingsPath: string, fakeLlmUrl: string): void {
     createdAt: now,
     updatedAt: now,
   };
+  const fakeModel = { provider: `custom:${FAKE_PROVIDER_ID}`, model: FAKE_MODEL };
   mkdirSync(dirname(settingsPath), { recursive: true });
   writeFileSync(
     settingsPath,
-    JSON.stringify({ customProviders: { [provider.id]: provider } }, null, 2),
+    JSON.stringify(
+      {
+        customProviders: { [provider.id]: provider },
+        prModels: { guide: fakeModel, ask: fakeModel },
+      },
+      null,
+      2,
+    ),
   );
 }
 

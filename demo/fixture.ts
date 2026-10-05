@@ -127,6 +127,24 @@ export class Demo {
     await this.pause(600);
   }
 
+  /**
+   * Clicks into `target` and pastes what the app last copied, as Cmd+V would.
+   * The page can't read the real clipboard, and the mock never writes to it.
+   */
+  async paste(target: Locator): Promise<void> {
+    await this.click(target);
+    await this.page.evaluate(() => {
+      const controls = window.__yarvisDemoControls;
+      if (!controls) throw new Error("the Tauri mock isn't installed");
+      const clipboardData = new DataTransfer();
+      clipboardData.setData("text/plain", controls.clipboardText());
+      document.activeElement?.dispatchEvent(
+        new ClipboardEvent("paste", { clipboardData, bubbles: true, cancelable: true }),
+      );
+    });
+    await this.pause(400);
+  }
+
   async press(key: string): Promise<void> {
     await this.page.keyboard.press(key);
     await this.pause(400);

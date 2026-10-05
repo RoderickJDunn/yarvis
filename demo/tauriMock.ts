@@ -24,6 +24,8 @@ declare global {
     __yarvisDemoControls?: {
       emit: typeof emit;
       fireAlarm: (alarm: Omit<Alarm, "status">) => Promise<void>;
+      /** What the app last put on the clipboard, for a flow to paste. */
+      clipboardText: () => string;
     };
   }
 }
@@ -80,8 +82,17 @@ let settings: Settings = {
 
 const presentSecrets = new Set(config.presentSecrets);
 let alarms: Alarm[] = [];
-// The core records copies made outside the app; the demo has none.
-const clipboardHistory: ClipboardHistoryItem[] = [];
+// What the core's clipboard poller would have recorded, newest first.
+let clipboardHistory: ClipboardHistoryItem[] = [
+  { text: "bun test tests/checkout", minutesAgo: 3 },
+  { text: "https://github.com/acme/checkout-web/pull/477", minutesAgo: 12 },
+  { text: "Saved cards now load before the new-card form", minutesAgo: 26 },
+  { text: "usePaymentIntent", minutesAgo: 41 },
+].map(({ text, minutesAgo }, i) => ({
+  id: `clip-${i}`,
+  text,
+  capturedAtMs: Date.now() - minutesAgo * 60_000,
+}));
 
 type CommandArgs = Record<string, unknown>;
 
@@ -201,8 +212,14 @@ function handleCommand(cmd: string, args: CommandArgs): unknown {
     case "clipboard_history":
       return clipboardHistory;
     case "clipboard_clear_history":
+      clipboardHistory = [];
       return null;
+    // The core's poller puts the app's own copies at the front of history too.
     case "clipboard_write":
+      clipboardHistory = [
+        { id: crypto.randomUUID(), text: args.text as string, capturedAtMs: Date.now() },
+        ...clipboardHistory.filter((item) => item.text !== args.text),
+      ];
       return null;
 
     case "get_agent_config":
@@ -248,4 +265,8 @@ function handleCommand(cmd: string, args: CommandArgs): unknown {
 mockIPC((cmd, payload) => handleCommand(cmd, (payload ?? {}) as CommandArgs), {
   shouldMockEvents: true,
 });
-window.__yarvisDemoControls = { emit, fireAlarm };
+window.__yarvisDemoControls = {
+  emit,
+  fireAlarm,
+  clipboardText: () => clipboardHistory[0]?.text ?? "",
+};
