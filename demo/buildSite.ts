@@ -66,6 +66,10 @@ const FLOW_INTROS: Record<string, { title: string; blurb: string }> = {
     title: "JIRA",
     blurb: "Comment on a ticket, move it to review, and start work on the next one.",
   },
+  "scheduled-jobs": {
+    title: "Scheduled jobs",
+    blurb: "Put a prompt on a weekday schedule, run it now, and read what the agent wrote.",
+  },
   calendar: { title: "Calendar", blurb: "The week ahead, with an alarm armed for a meeting." },
   terminal: { title: "Terminal", blurb: "Shells inside the app, next to everything else." },
   "terminal-panes": {

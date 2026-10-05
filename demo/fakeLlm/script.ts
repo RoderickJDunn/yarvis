@@ -66,6 +66,23 @@ function addElement(key: string, type: string, props: object, children: string[]
 }
 
 export const REPLIES: Reply[] = [
+  // The scheduled-jobs flow's prompt. It reads the task list, then drafts.
+  {
+    when: /standup update/i,
+    toolCall: { name: "list_tasks", args: {} },
+    after: [
+      "**Yesterday**",
+      "- Put the new payment step behind the `checkout-v2` flag",
+      "",
+      "**Today**",
+      "- Prep demo for Thursday's review",
+      "- Reply to the design feedback thread",
+      "- Review Priya's payment-step PR (#477), due tomorrow",
+      "",
+      "**Blockers**",
+      "- None",
+    ].join("\n"),
+  },
   // A PR line question. First, because its prompt says "a reviewer is looking
   // at lines…", which the screen-summary reply below would also match.
   {

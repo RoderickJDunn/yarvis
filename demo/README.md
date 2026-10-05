@@ -29,7 +29,7 @@ creates a task), Omni Chat, the Omni layout builder, GitHub PRs and issues,
 asking about a PR's lines and posting the answer, JIRA tickets, the Calendar,
 the Terminal tab with its split panes and tabs, the clipboard palette, a
 workspace's Claude Code session, local review comments pasted into it, a
-spoken chat turn, and a short tour.
+spoken chat turn, a scheduled job, and a short tour.
 
 Output lands in `demo/output/<flow-title>/`, with the test's title lowercased
 and hyphenated ("Memory library" becomes `memory-library/`). It holds numbered
@@ -59,7 +59,9 @@ HTTP API into Postgres, exactly as in the app. These are faked:
   being written. A reply can call one of the sidecar's tools, which then runs
   for real: the chat flow's `create_task` call puts a real task on the list.
   PR line questions and guided reviews use it too, through the `prModels`
-  setting. It also answers the OpenAI audio endpoints, so it can back voice:
+  setting, and so does the `standup-writer` specialist the stack writes for
+  scheduled jobs. A job on the default agent would use the default chat
+  model, which is a real provider when the runner passes a key through. It also answers the OpenAI audio endpoints, so it can back voice:
   every recording transcribes to `VOICE_TRANSCRIPT` in `script.ts`, and spoken
   replies come back as silence. The voice flow records Chromium's fake
   microphone.

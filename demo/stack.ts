@@ -99,6 +99,33 @@ function writeFakeProvider(settingsPath: string, fakeLlmUrl: string): void {
   );
 }
 
+/** The specialist the scheduled-jobs flow runs. Its file name is what the Specialist picker shows. */
+export const DEMO_SPECIALIST = "standup-writer";
+
+/**
+ * Writes a specialist that runs on the fake model. A job on the default agent
+ * would run on the default chat model, which is a real provider whenever the
+ * runner passes a provider key through.
+ */
+function writeDemoSpecialist(agentsDir: string): void {
+  mkdirSync(agentsDir, { recursive: true });
+  writeFileSync(
+    join(agentsDir, `${DEMO_SPECIALIST}.md`),
+    [
+      "---",
+      `name: ${DEMO_SPECIALIST}`,
+      "description: Drafts a standup update from the user's tasks.",
+      "tools: [list_tasks]",
+      `model: ${FAKE_PROVIDER}/${FAKE_MODEL}`,
+      "maxSteps: 4",
+      "---",
+      "",
+      "You draft the user's standup update from their task list. Keep it to three short sections: yesterday, today, blockers.",
+      "",
+    ].join("\n"),
+  );
+}
+
 export interface Stack {
   /** The app's URL, `demo/index.html` on the Vite dev server. */
   appUrl: string;
@@ -297,6 +324,8 @@ export async function startStack(): Promise<Stack> {
 
   const settingsPath = join(home, ".yarvis", "settings.json");
   writeFakeProvider(settingsPath, fakeLlmUrl);
+  const agentsDir = join(home, ".yarvis", "agents");
+  writeDemoSpecialist(agentsDir);
   // Resolved before anything starts: past this point a failure has to stop
   // what's running, which only the try block below does.
   const bunPath = resolveBunPath();
@@ -339,7 +368,7 @@ export async function startStack(): Promise<Stack> {
     JIRA_EMAIL: JIRA_VIEWER.emailAddress,
     JIRA_API_TOKEN: "demo-jira-token",
     YARVIS_JIRA_API_URL: fakeJiraUrl,
-    YARVIS_AGENTS_DIR: join(home, ".yarvis", "agents"),
+    YARVIS_AGENTS_DIR: agentsDir,
     YARVIS_WORKSPACES_ROOT: WORKSPACES_ROOT,
     CLAUDE_HOME: join(home, ".claude"),
   };
