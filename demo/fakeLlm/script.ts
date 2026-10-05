@@ -93,6 +93,16 @@ export const REPLIES: Reply[] = [
       "Priya's payment-step PR is your most urgent review, and it's due tomorrow. For Thursday, you noted you want to show the new payment step and the load-time chart.",
     ].join("\n"),
   },
+  // What the voice flow "says"; see VOICE_TRANSCRIPT.
+  {
+    when: /load-time chart/i,
+    toolCall: {
+      name: "create_task",
+      args: { title: "Send Priya the load-time chart", scope: "weekly" },
+    },
+    after:
+      "Got it. **Send Priya the load-time chart** is on this week's list, so it'll be ready before Thursday's review.",
+  },
   {
     when: /rollout plan|remind me|add a task/i,
     toolCall: {
@@ -137,6 +147,13 @@ export const REPLIES: Reply[] = [
     ].join("\n"),
   },
 ];
+
+/**
+ * What the fake speech-to-text endpoint hears in every recording. There's no
+ * real speech to transcribe: the flow records Chromium's fake microphone.
+ */
+export const VOICE_TRANSCRIPT =
+  "Remind me to send Priya the load-time chart before Thursday's review";
 
 /** For a chat message no reply matches. Worded so it's easy to spot in a screenshot. */
 export const DEFAULT_REPLY: Reply = {
