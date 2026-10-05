@@ -1,26 +1,26 @@
-import { expect, test } from "../fixture";
+import { expect, sidecarHeaders, sidecarUrl, test } from "../fixture";
 
 const STAGING_URL = "https://staging.checkout.example.com/cart?flag=checkout-v2";
 
+const SAVED_ENTRIES = [
+  { label: "Staging checkout", content: STAGING_URL, tags: ["checkout", "staging"] },
+  {
+    label: "Rollout note",
+    content: "Ship the payment step to 10% of returning customers first.",
+    tags: ["checkout"],
+    pinned: true,
+  },
+  {
+    label: "Standup update",
+    content: "Yesterday: payment step behind the flag. Today: review #477. Blockers: none.",
+    tags: ["standup"],
+  },
+];
+
 test("clipboard", async ({ demo, page }) => {
-  const sidecar = `http://127.0.0.1:${process.env.DEMO_SIDECAR_PORT}`;
-  const headers = { Authorization: `Bearer ${process.env.DEMO_SIDECAR_TOKEN}` };
-  for (const entry of [
-    { label: "Staging checkout", content: STAGING_URL, tags: ["checkout", "staging"] },
-    {
-      label: "Rollout note",
-      content: "Ship the payment step to 10% of returning customers first.",
-      tags: ["checkout"],
-      pinned: true,
-    },
-    {
-      label: "Standup update",
-      content: "Yesterday: payment step behind the flag. Today: review #477. Blockers: none.",
-      tags: ["standup"],
-    },
-  ]) {
-    const res = await page.request.post(`${sidecar}/api/clipboard/entries`, {
-      headers,
+  for (const entry of SAVED_ENTRIES) {
+    const res = await page.request.post(sidecarUrl("/api/clipboard/entries"), {
+      headers: sidecarHeaders(),
       data: entry,
     });
     expect(res.ok(), await res.text()).toBe(true);
@@ -51,7 +51,8 @@ test("clipboard", async ({ demo, page }) => {
   await expect(page.getByText("https://github.com/acme/checkout-web/pull/477")).toBeVisible();
   await demo.shot("history");
 
-  // Copying closes the palette; the copy lands at the front of History.
+  // Copying closes the palette; the copy lands at the front of History. It
+  // reopens from the nav rail, the palette's other way in.
   await demo.click(page.getByRole("button", { name: "Saved", exact: true }));
   await demo.click(page.getByRole("button", { name: /^Staging checkout/ }));
   await expect(search).toBeHidden();

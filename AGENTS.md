@@ -189,10 +189,10 @@ back to ad-hoc.
 - A GitHub, Google or JIRA client is built with `createGitHubClient(config, token)`,
   `createGoogleCalendarClient(config)` or `createJiraClient(config, …)`, never its
   constructor. The factories are where the demo's endpoint overrides apply, so a
-  bare `new GitHubClient(token)`
-  would send the demo's placeholder token, or a dev's real one, to the real
-  service. The overrides themselves are refused by the Rust core
-  (`ENDPOINT_OVERRIDE_VARS` in `sidecar.rs`) and accepted only for loopback URLs.
+  bare `new GitHubClient(token)` would send the demo's placeholder token, or a
+  dev's real one, to the real service. The overrides themselves are refused by
+  the Rust core (`ENDPOINT_OVERRIDE_VARS` in `sidecar.rs`) and accepted only for
+  loopback URLs.
 - Stacked pull requests have two sources and neither is optional: the CLI
   decides membership, the API decides each layer's status, and either being
   absent degrades rather than fails. `sidecar/src/workspaces/stack.ts` explains

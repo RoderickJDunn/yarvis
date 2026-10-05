@@ -1,18 +1,18 @@
 /**
  * A stand-in for a JIRA Cloud site's REST API (v3), answering the calls the
  * sidecar's `JiraClient` makes from the tickets in `data.ts`. The sidecar finds
- * it through YARVIS_JIRA_API_URL. Status changes, assignments, comments and
- * new tickets are kept for the run, so a flow sees what it changed.
+ * it through YARVIS_JIRA_API_URL. Status changes, assignments, edits, comments
+ * and new tickets are kept for the run, so a flow sees what it changed.
  *
- * JQL isn't parsed properly: `matchesJql` recognises the handful of queries
- * the app builds, and treats anything else as free text.
+ * JQL isn't parsed properly: `matchesJql` recognises the handful of clauses
+ * the app builds and ignores any others. A query with no operator at all is
+ * the Search tab's free text.
  */
 
 import type { Server } from "node:http";
 import { type FakeRequest, type FakeResponse, startFakeServer } from "../fakeHttp";
 import {
   type FakeTicket,
-  type FakeUser,
   ISSUE_TYPES,
   PEOPLE,
   PROJECT,
@@ -22,6 +22,7 @@ import {
   VIEWER,
 } from "./data";
 
+/** The tickets as this run has left them. Copied, so the seed data in `data.ts` stays as written. */
 const tickets: FakeTicket[] = TICKETS.map((t) => ({
   ...t,
   comments: [...t.comments],
@@ -55,20 +56,26 @@ function fromAdf(node: AdfNode | undefined): string {
   return node.type === "doc" ? parts.join("\n\n") : parts.join("");
 }
 
+const statusNamed = (name: StatusName) => STATUSES.find((s) => s.name === name) ?? STATUSES[0];
+
 function statusOf(name: StatusName) {
-  const status = STATUSES.find((s) => s.name === name) ?? STATUSES[0];
+  const status = statusNamed(name);
   return { name: status.name, statusCategory: { key: status.category } };
 }
 
-const toUser = (u: FakeUser | null) => u && { ...u };
+const toComment = (c: FakeTicket["comments"][number]) => ({
+  author: c.author,
+  body: toAdf(c.text),
+  created: c.createdAt,
+});
 
 function toFields(t: FakeTicket) {
   return {
     summary: t.summary,
     status: statusOf(t.status),
     labels: t.labels,
-    assignee: toUser(t.assignee),
-    reporter: toUser(t.reporter),
+    assignee: t.assignee,
+    reporter: t.reporter,
     issuetype: { name: t.issueType },
     priority: { name: t.priority },
     created: t.createdAt,
@@ -104,7 +111,7 @@ export function matchesJql(t: FakeTicket, jql: string): boolean {
   if (keys !== undefined) return keys.split(",").some((k) => k.trim() === t.key);
   if (/^[A-Z]+-\d+$/.test(query)) return t.key === query;
 
-  const isDone = STATUSES.find((s) => s.name === t.status)?.category === "done";
+  const isDone = statusNamed(t.status).category === "done";
   if (/statusCategory != Done/i.test(query) && isDone) return false;
   if (/assignee = currentUser\(\)/i.test(query) && t.assignee?.accountId !== VIEWER.accountId) {
     return false;
@@ -112,8 +119,9 @@ export function matchesJql(t: FakeTicket, jql: string): boolean {
   if (/reporter = currentUser\(\)/i.test(query) && t.reporter.accountId !== VIEWER.accountId) {
     return false;
   }
-  const text = query.match(/text ~ "([^"]*)"/i)?.[1];
-  const words = (text ?? (/[=~]/.test(query) ? "" : query)).toLowerCase();
+  const quotedText = query.match(/text ~ "([^"]*)"/i)?.[1];
+  const isBareText = !/[=~]/.test(query);
+  const words = (quotedText ?? (isBareText ? query : "")).toLowerCase();
   return !words || `${t.summary} ${t.description}`.toLowerCase().includes(words);
 }
 
@@ -125,7 +133,7 @@ function transitionsFor(t: FakeTicket) {
   }));
 }
 
-function touch(t: FakeTicket): void {
+function markUpdated(t: FakeTicket): void {
   t.updatedAt = new Date().toISOString();
 }
 
@@ -182,7 +190,8 @@ export function handleJiraRequest({ method, url, body }: FakeRequest): FakeRespo
   }
 
   const [, key, rest = ""] = path.match(/^\/issue\/([^/]+)(\/.*)?$/) ?? [];
-  const ticket = key ? findTicket(decodeURIComponent(key)) : undefined;
+  if (!key) return { status: 404, json: { errorMessages: [`No route for ${path}`], errors: {} } };
+  const ticket = findTicket(decodeURIComponent(key));
   if (!ticket) {
     return { status: 404, json: { errorMessages: ["Issue does not exist"], errors: {} } };
   }
@@ -195,19 +204,11 @@ export function handleJiraRequest({ method, url, body }: FakeRequest): FakeRespo
     if (fields.summary !== undefined) ticket.summary = fields.summary;
     if (fields.description !== undefined) ticket.description = fromAdf(fields.description);
     if (fields.labels !== undefined) ticket.labels = fields.labels;
-    touch(ticket);
+    markUpdated(ticket);
     return { status: 204 };
   }
   if (rest === "/comment" && method === "GET") {
-    return {
-      json: {
-        comments: ticket.comments.map((c) => ({
-          author: c.author,
-          body: toAdf(c.text),
-          created: c.createdAt,
-        })),
-      },
-    };
+    return { json: { comments: ticket.comments.map(toComment) } };
   }
   if (rest === "/comment" && method === "POST") {
     const comment = {
@@ -216,11 +217,8 @@ export function handleJiraRequest({ method, url, body }: FakeRequest): FakeRespo
       createdAt: new Date().toISOString(),
     };
     ticket.comments.push(comment);
-    touch(ticket);
-    return {
-      status: 201,
-      json: { author: VIEWER, body: toAdf(comment.text), created: comment.createdAt },
-    };
+    markUpdated(ticket);
+    return { status: 201, json: toComment(comment) };
   }
   if (rest === "/transitions" && method === "GET") {
     return { json: { transitions: transitionsFor(ticket) } };
@@ -230,13 +228,13 @@ export function handleJiraRequest({ method, url, body }: FakeRequest): FakeRespo
     const target = STATUSES.find((s) => s.transitionId === id);
     if (!target) return { status: 400, json: { errorMessages: ["Unknown transition"] } };
     ticket.status = target.name;
-    touch(ticket);
+    markUpdated(ticket);
     return { status: 204 };
   }
   if (rest === "/assignee" && method === "PUT") {
     const { accountId } = body as { accountId: string | null };
     ticket.assignee = PEOPLE.find((p) => p.accountId === accountId) ?? null;
-    touch(ticket);
+    markUpdated(ticket);
     return { status: 204 };
   }
   return { status: 404, json: { errorMessages: ["Not found"], errors: {} } };

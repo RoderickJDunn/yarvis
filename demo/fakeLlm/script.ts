@@ -93,7 +93,8 @@ export const REPLIES: Reply[] = [
       "Priya's payment-step PR is your most urgent review, and it's due tomorrow. For Thursday, you noted you want to show the new payment step and the load-time chart.",
     ].join("\n"),
   },
-  // What the voice flow "says"; see VOICE_TRANSCRIPT.
+  // What the voice flow "says" (VOICE_TRANSCRIPT). Above the "remind me" reply,
+  // which would also match it.
   {
     when: /load-time chart/i,
     toolCall: {

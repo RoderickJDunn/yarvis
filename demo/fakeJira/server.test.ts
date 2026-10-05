@@ -58,6 +58,14 @@ describe("fake JIRA", () => {
     expect(comments[comments.length - 1]?.body).toEqual(adf);
   });
 
+  it("drops a ticket moved to Done from the open lists", () => {
+    const open = "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC";
+    const ticket = TICKETS.find((t) => t.key === "PAY-131");
+    expect(search(open).some((i) => i.key === "PAY-131")).toBe(true);
+    request("POST", `/issue/${ticket?.key}/transitions`, { transition: { id: "41" } });
+    expect(search(open).some((i) => i.key === "PAY-131")).toBe(false);
+  });
+
   it("creates a ticket with the next key in the project", () => {
     const created = request("POST", "/issue", {
       fields: { project: { key: "PAY" }, summary: "New thing", issuetype: { name: "Task" } },

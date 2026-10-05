@@ -162,11 +162,26 @@ describe("fake LLM", () => {
     expect(JSON.parse(toolCall.arguments).title).toBe("Send Priya the load-time chart");
   });
 
-  it("speaks as a WAV of silence", async () => {
+  it("speaks as a WAV of silence about as long as the words", async () => {
     const speechUrl = url.replace("/chat/completions", "/audio/speech");
-    const wav = await post(speechUrl, JSON.stringify({ model: "tts", input: "Got it." }));
-    expect(wav.subarray(0, 4).toString("ascii")).toBe("RIFF");
-    expect(wav.length).toBeGreaterThan(44);
+    const speak = (input: string) => post(speechUrl, JSON.stringify({ model: "tts", input }));
+    const short = await speak("Got it.");
+    const long = await speak("Got it. The task is on this week's list, ready before the review.");
+    expect(short.subarray(0, 4).toString("ascii")).toBe("RIFF");
+    expect(long.length).toBeGreaterThan(short.length);
+  });
+
+  it("answers a PR line question rather than the screen-summary reply its prompt also matches", async () => {
+    const { text } = await streamed({
+      messages: [
+        {
+          role: "user",
+          content:
+            "A reviewer is looking at lines 4–4 of a file.\n\nTheir question: Why is the card form lazy here?",
+        },
+      ],
+    });
+    expect(text).toContain("One gap: a customer with");
   });
 
   it("answers a non-streaming request with a whole completion", async () => {

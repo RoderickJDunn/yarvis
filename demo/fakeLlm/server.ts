@@ -196,8 +196,8 @@ const SPEECH_SAMPLE_RATE = 16_000;
 /** Roughly a speaking pace, so "Speaking…" stays up about as long as the words would. */
 const SPEECH_SECONDS_PER_WORD = 0.3;
 
-/** A 16-bit mono WAV of silence. */
-export function silentWav(seconds: number): Buffer {
+/** A 16-bit mono WAV of silence: the standard 44-byte RIFF header, then zeroed samples. */
+function silentWav(seconds: number): Buffer {
   const dataBytes = Math.round(seconds * SPEECH_SAMPLE_RATE) * 2;
   const wav = Buffer.alloc(44 + dataBytes);
   wav.write("RIFF", 0);
@@ -205,8 +205,8 @@ export function silentWav(seconds: number): Buffer {
   wav.write("WAVE", 8);
   wav.write("fmt ", 12);
   wav.writeUInt32LE(16, 16);
-  wav.writeUInt16LE(1, 20); // PCM
-  wav.writeUInt16LE(1, 22); // mono
+  wav.writeUInt16LE(1, 20);
+  wav.writeUInt16LE(1, 22);
   wav.writeUInt32LE(SPEECH_SAMPLE_RATE, 24);
   wav.writeUInt32LE(SPEECH_SAMPLE_RATE * 2, 28);
   wav.writeUInt16LE(2, 32);
@@ -218,7 +218,7 @@ export function silentWav(seconds: number): Buffer {
 
 async function handleRequest(req: IncomingMessage, res: ServerResponse, pace: Pacing) {
   if (req.method === "POST" && req.url?.endsWith("/audio/transcriptions")) {
-    // The upload is multipart audio, which has nothing in it to transcribe.
+    // Read and ignored: the recording is Chromium's fake-microphone beep.
     await readBody(req);
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ text: VOICE_TRANSCRIPT }));
@@ -228,6 +228,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, pace: Pa
     const { input = "" } = JSON.parse(await readBody(req)) as { input?: string };
     const words = input.split(/\s+/).filter(Boolean).length;
     res.writeHead(200, { "Content-Type": "audio/wav" });
+    // At least half a second, so even a one-word reply shows "Speaking…".
     res.end(silentWav(Math.max(0.5, words * SPEECH_SECONDS_PER_WORD)));
     return;
   }

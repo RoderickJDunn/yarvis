@@ -8,31 +8,28 @@ test("pr review", async ({ demo, page }) => {
   await demo.click(page.getByText("Payment step: show saved cards first"));
   await expect(page.getByText("Saved cards now load before the new-card form")).toBeVisible();
 
-  const lineWith = (text: string) =>
-    page.locator('div[class*="group/line"]').filter({ hasText: text }).first();
-
-  const lazyLine = lineWith("const CardForm = lazy");
+  const lazyLine = demo.diffLine("const CardForm = lazy");
   await demo.hover(lazyLine);
   await demo.click(lazyLine.getByRole("button", { name: /^Ask about this line/ }));
   const question = page.getByPlaceholder("Ask about these lines");
   await expect(question).toBeVisible();
   // The composer and the answer card open below the line, past the bottom of the screen.
-  const centre = (el: Element) => el.scrollIntoView({ block: "center" });
-  await question.evaluate(centre);
+  const scrollToCentre = (el: Element) => el.scrollIntoView({ block: "center" });
+  await question.evaluate(scrollToCentre);
   await demo.type(question, "Why is the card form lazy here?");
   await demo.shot("question on a line");
 
   await demo.press("Enter");
   const answer = page.getByText("One gap: a customer with");
   await expect(answer).toBeVisible({ timeout: 15_000 });
-  await answer.evaluate(centre);
+  await answer.evaluate(scrollToCentre);
   await demo.shot("answer");
 
   await demo.click(page.getByRole("button", { name: "Post", exact: true }));
   await expect(page.getByText("Posted to the PR")).toBeVisible();
   await demo.shot("answer posted");
 
-  const retryLine = lineWith("retry: 1,");
+  const retryLine = demo.diffLine("retry: 1,");
   await demo.hover(retryLine);
   await demo.click(retryLine.getByRole("button", { name: "Comment on this line" }));
   await demo.type(
@@ -42,7 +39,7 @@ test("pr review", async ({ demo, page }) => {
   await demo.click(page.getByRole("button", { name: "Comment", exact: true }));
   const comment = page.getByText("you · just now");
   await expect(comment).toBeVisible();
-  await comment.evaluate(centre);
+  await comment.evaluate(scrollToCentre);
   // Onto the file list, so no diff row is left showing its hover buttons.
   await demo.hover(page.getByText("usePaymentIntent.ts", { exact: true }));
   await demo.shot("comment posted");

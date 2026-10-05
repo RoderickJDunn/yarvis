@@ -68,8 +68,8 @@ HTTP API into Postgres, exactly as in the app. These are faked:
   `YARVIS_GOOGLE_*` and `YARVIS_JIRA_API_URL` endpoint overrides (see
   `docs/configuration.md`). The PRs tab, PR review, Issues and the Calendar
   views all show their data, which lives in `fakeGithub/data.ts`,
-  `fakeGoogle/server.ts` and `fakeJira/data.ts`. New issues, comments and JIRA
-  status changes are kept until the run ends. Calendar events are laid out
+  `fakeGoogle/server.ts` and `fakeJira/data.ts`. New issues and comments, and
+  every JIRA change, are kept until the run ends. Calendar events are laid out
   around today. The Stack tab and merging a workspace's stack use the `gh`
   CLI, which isn't faked.
 - **The checkout-web repo** is a local git repo (`seedRepo.ts`). The seed puts
@@ -112,11 +112,10 @@ logs `[fake-llm]` and answers in text.
    `YARVIS_DEMO_DATABASE_URL`. Since this step deletes the database, the
    runner only accepts a local one with "demo" in its name, and refuses query
    parameters such as `?dbname=` that would point the sidecar elsewhere.
-2. Starts the fake model, GitHub and Google, the sidecar against that
-   database, and Vite. The
-   sidecar's `HOME`, `settings.json`, agents directory and `CLAUDE_HOME` point
-   into `demo/output/.state/`, so your real memories, sessions and workspaces
-   never show up in a screenshot. Workspaces go in `/tmp/yarvis-demo/`, since
+2. Starts the fake model, GitHub, Google and JIRA, the sidecar against that
+   database, and Vite. The sidecar's `HOME`, `settings.json`, agents directory
+   and `CLAUDE_HOME` point into `demo/output/.state/`, so your real memories,
+   sessions and workspaces never show up in a screenshot. Workspaces go in `/tmp/yarvis-demo/`, since
    the app shows a workspace's full path. Background workers are off.
 3. Seeds the database with made-up data from `seed.ts`: tasks, memories, a
    provisioned "Payment step" workspace on the local checkout-web repo, which
@@ -162,7 +161,8 @@ target, and ripples on click. Typing goes one key at a time.
 | `type(locator, text)` | Clicks into a field and types at a readable speed. |
 | `press(key)` | Presses a key, e.g. `"Enter"`. |
 | `hover(locator)` | Moves the cursor without clicking. |
-| `paste(locator)` | Clicks into a field and pastes what the app last copied. |
+| `paste(locator)` | Clicks into a field or terminal and pastes what the app last copied. |
+| `diffLine(text)` | The diff row holding `text`, in a PR review or a workspace diff. |
 | `pause(ms)` | Holds still so a viewer can take in the screen. |
 | `shot(name, { target, cursor })` | Saves the next numbered PNG. Pass `target` to capture one element. The cursor is hidden unless `cursor: true`. |
 | `fireAlarm(alarm)` | Rings an alarm, as the core's scheduler would. |

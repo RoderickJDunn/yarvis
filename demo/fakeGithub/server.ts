@@ -70,6 +70,10 @@ function toRestIssue(issue: FakeIssue) {
   };
 }
 
+function toRestComment(c: FakeIssue["comments"][number]) {
+  return { user: { login: c.author }, body: c.body, created_at: c.createdAt };
+}
+
 /** The combined check state, as GitHub reports it: any failure wins over anything still running. */
 function rollupState(pr: FakePull): "SUCCESS" | "FAILURE" | "PENDING" {
   if (pr.checks.some((c) => c.conclusion === "FAILURE")) return "FAILURE";
@@ -281,11 +285,6 @@ function handleRest({ method, url, body }: FakeRequest): FakeResponse {
     return issue ? { json: toRestIssue(issue) } : { status: 404, json: {} };
   }
   const commentsIssueNumber = matchNumber(/^\/issues\/(\d+)\/comments$/);
-  const toRestComment = (c: FakeIssue["comments"][number]) => ({
-    user: { login: c.author },
-    body: c.body,
-    created_at: c.createdAt,
-  });
   if (commentsIssueNumber && method === "GET") {
     return { json: (findIssue(commentsIssueNumber)?.comments ?? []).map(toRestComment) };
   }

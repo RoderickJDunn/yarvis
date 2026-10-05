@@ -149,7 +149,9 @@ export function createCheckoutRepo(): void {
   git(source, "add", ".");
   git(source, "commit", "--quiet", "-m", "Split the cart summary out of the payment form");
   git(REMOTES, "clone", "--quiet", "--bare", source, bare);
-  git(WORKSPACES_ROOT, "clone", "--quiet", bare, join(".repos", `${OWNER}-${REPO}`));
+  // The path `primaryClonePath` builds. Anywhere else, provisioning clones from github.com.
+  const primaryClone = join(".repos", `${OWNER}-${REPO}`.toLowerCase());
+  git(WORKSPACES_ROOT, "clone", "--quiet", bare, primaryClone);
 }
 
 /** Leaves the payment-step changes uncommitted in a worktree of the repo. */

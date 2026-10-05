@@ -1,7 +1,7 @@
 /**
  * Starts everything a demo needs: a fresh demo database, the fake chat model,
- * GitHub and Google servers, a sidecar pointed at all of them, and the Vite
- * dev server serving `demo/index.html`.
+ * GitHub, Google and JIRA servers, a sidecar pointed at all of them, and the
+ * Vite dev server serving `demo/index.html`.
  *
  * The sidecar's home directory and settings file point into
  * `demo/output/.state/` and its workspaces root into `/tmp/yarvis-demo/`, so
@@ -58,6 +58,8 @@ export const PASSTHROUGH_SECRETS = ["ANTHROPIC_API_KEY", "GEMINI_API_KEY", "CERE
  * fixture can select it before the page loads.
  */
 export const FAKE_PROVIDER_ID = "00000000-0000-4000-8000-00000000de70";
+/** The fake model's provider id as the sidecar and the chat pickers name it. */
+export const FAKE_PROVIDER = `custom:${FAKE_PROVIDER_ID}`;
 const FAKE_PROVIDER_NAME = "Demo model";
 
 /** Shown in Settings, so it should look like a Google OAuth client id. */
@@ -82,7 +84,7 @@ function writeFakeProvider(settingsPath: string, fakeLlmUrl: string): void {
     createdAt: now,
     updatedAt: now,
   };
-  const fakeModel = { provider: `custom:${FAKE_PROVIDER_ID}`, model: FAKE_MODEL };
+  const fakeModel = { provider: FAKE_PROVIDER, model: FAKE_MODEL };
   mkdirSync(dirname(settingsPath), { recursive: true });
   writeFileSync(
     settingsPath,

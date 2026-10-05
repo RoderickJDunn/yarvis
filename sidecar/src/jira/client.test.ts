@@ -65,7 +65,8 @@ describe("isAllowedJiraBaseUrl", () => {
 });
 
 describe("createJiraClient", () => {
-  it("sends requests to an overridden API but links to the real site", async () => {
+  /** Runs one search through the factory and returns the URL requested and the issue's link. */
+  async function searchThrough(endpoints: { jiraApi?: string } | undefined) {
     const requested: string[] = [];
     const realFetch = globalThis.fetch;
     globalThis.fetch = (async (url: string) => {
@@ -75,18 +76,23 @@ describe("createJiraClient", () => {
       });
     }) as unknown as typeof fetch;
     try {
-      const jira = createJiraClient(
-        { endpoints: { jiraApi: "http://127.0.0.1:4020" } },
-        BASE,
-        "me@acme.com",
-        "token",
-      );
+      const jira = createJiraClient({ endpoints }, BASE, "me@acme.com", "token");
       const [issue] = await jira.searchIssues("assignee = currentUser()");
-      expect(requested[0]).toStartWith("http://127.0.0.1:4020/rest/api/3/search/jql");
-      expect(issue!.url).toBe("https://acme.atlassian.net/browse/PROJ-45");
+      return { url: requested[0], link: issue!.url };
     } finally {
       globalThis.fetch = realFetch;
     }
+  }
+
+  it("sends requests to the site when nothing overrides it", async () => {
+    const { url } = await searchThrough(undefined);
+    expect(url).toStartWith(`${BASE}/rest/api/3/search/jql`);
+  });
+
+  it("sends requests to an overridden API but links to the real site", async () => {
+    const { url, link } = await searchThrough({ jiraApi: "http://127.0.0.1:4020" });
+    expect(url).toStartWith("http://127.0.0.1:4020/rest/api/3/search/jql");
+    expect(link).toBe("https://acme.atlassian.net/browse/PROJ-45");
   });
 });
 

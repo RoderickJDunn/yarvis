@@ -110,13 +110,14 @@ export async function seed({
     status: string;
     repos: { status: string; error: string | null; worktreePath: string }[];
   }>(`/api/workspaces/${workspace.id}`);
-  const [worktree] = provisioned.repos;
-  if (provisioned.status !== "active" || worktree?.status !== "ready") {
+  const [checkout] = provisioned.repos;
+  if (provisioned.status !== "active" || checkout?.status !== "ready") {
+    const repoState = checkout ? (checkout.error ?? `repo ${checkout.status}`) : "no repo";
     throw new Error(
-      `provisioning the demo workspace left it "${provisioned.status}": ${worktree?.error ?? "no repo"}`,
+      `provisioning the demo workspace left it "${provisioned.status}": ${repoState}`,
     );
   }
-  writeWorkInProgress(worktree.worktreePath);
+  writeWorkInProgress(checkout.worktreePath);
 
   for (const memory of [
     { kind: "preference", content: "Prefers morning focus blocks with no meetings before 11am." },

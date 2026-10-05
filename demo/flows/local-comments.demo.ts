@@ -7,13 +7,10 @@ test("local comments", async ({ demo, page }) => {
   await expect(page.getByText("3 changed files")).toBeVisible();
   await demo.shot("changed files");
 
-  const lineWith = (text: string) =>
-    page.locator('div[class*="group/line"]').filter({ hasText: text }).first();
-
   /** Opens a changed file's diff and leaves a comment on the line holding `code`. */
-  async function comment(path: string, code: string, body: string) {
+  async function commentOnLine(path: string, code: string, body: string) {
     await demo.click(page.getByTitle(`Open diff for ${path}`));
-    const line = lineWith(code);
+    const line = demo.diffLine(code);
     await expect(line).toBeVisible();
     await demo.hover(line);
     await demo.click(line.getByRole("button", { name: "Comment on this line" }));
@@ -24,14 +21,14 @@ test("local comments", async ({ demo, page }) => {
     await demo.hover(page.getByText(path, { exact: true }));
   }
 
-  await comment(
+  await commentOnLine(
     "src/checkout/PaymentStep.tsx",
     "const CardForm = lazy",
     "Customers with no saved cards now wait on this import. Prefetch it when the list comes back empty.",
   );
   await demo.shot("comment on the diff");
 
-  await comment(
+  await commentOnLine(
     "src/checkout/usePaymentIntent.ts",
     "retry: 3,",
     "Retry once, not three times, so a declined card doesn't hit the processor four times.",
@@ -46,13 +43,14 @@ test("local comments", async ({ demo, page }) => {
 
   // By title: the tab's accessible name also takes in its status dot.
   await demo.click(page.getByTitle("Claude", { exact: true }));
-  const agent = page.locator(".xterm").filter({ visible: true }).first();
-  await demo.paste(agent);
+  const claudeTerminal = page.locator(".xterm").filter({ visible: true }).first();
+  await demo.paste(claudeTerminal);
   await expect(page.getByText("[Pasted text #1")).toBeVisible();
   await demo.shot("pasted into claude");
 
   await demo.press("Enter");
-  // Short phrases, so a narrower pane wrapping the line doesn't split them.
+  // A short phrase: the pane wraps the reply, and getByText can't match text
+  // split across two terminal rows.
   await expect(page.getByText("Both comments are addressed.")).toBeVisible({ timeout: 20_000 });
   await demo.shot("claude addressed the comments");
 });

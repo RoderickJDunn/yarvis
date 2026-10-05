@@ -228,6 +228,7 @@ export class FakeTerminals {
   write(id: string, data: string): void {
     const session = this.sessions.get(id);
     if (!session) return;
+    // xterm sends a whole paste in one write, markers and all.
     if (data.startsWith(PASTE_START)) {
       this.paste(session, data.slice(PASTE_START.length).replace(PASTE_END, ""));
       return;
@@ -242,6 +243,7 @@ export class FakeTerminals {
   private paste(session: Session, text: string): void {
     session.input += text;
     session.pastes += 1;
+    // xterm turns a paste's line breaks into \r, as if Enter were pressed.
     const extraLines = text.split("\r").length - 1;
     this.play(session, [{ text: dim(`[Pasted text #${session.pastes} +${extraLines} lines]`) }]);
   }
@@ -290,7 +292,8 @@ export class FakeTerminals {
   private submit(session: Session, command: string): OutputChunk[] {
     if (session.mode === "agent") {
       if (!command) return [];
-      // Both replies open with their own line break.
+      // "Copy for Claude" text opens "Please address the following N review
+      // comments". Both replies open with their own line break.
       const reply = /review comments?\b/i.test(command) ? AGENT_REVIEW_REPLY : AGENT_REPLY;
       return [...reply, { text: AGENT_PROMPT }];
     }

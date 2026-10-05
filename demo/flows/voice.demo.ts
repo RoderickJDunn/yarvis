@@ -1,5 +1,5 @@
-import { expect, test } from "../fixture";
-import { FAKE_PROVIDER_ID } from "../stack";
+import { expect, sidecarHeaders, sidecarUrl, test } from "../fixture";
+import { FAKE_PROVIDER } from "../stack";
 
 // Chromium's fake microphone, granted without a prompt. What it records is a
 // beep; the fake model's speech-to-text hears VOICE_TRANSCRIPT in anything.
@@ -10,22 +10,19 @@ test.use({
   permissions: ["microphone"],
 });
 
-const sidecar = () => `http://127.0.0.1:${process.env.DEMO_SIDECAR_PORT}`;
-const headers = () => ({ Authorization: `Bearer ${process.env.DEMO_SIDECAR_TOKEN}` });
-const FAKE_PROVIDER = `custom:${FAKE_PROVIDER_ID}`;
-
 // Voice settings live in the sidecar's settings.json, which every later flow
 // shares, so they're put back to "not set up" whatever happens here.
 test.afterEach(async ({ request }) => {
-  await request.patch(`${sidecar()}/api/voice/config`, {
-    headers: headers(),
+  const res = await request.patch(sidecarUrl("/api/voice/config"), {
+    headers: sidecarHeaders(),
     data: { sttProvider: "", sttModel: "", ttsProvider: "", ttsModel: "" },
   });
+  expect(res.ok(), await res.text()).toBe(true);
 });
 
 test("voice", async ({ demo, page }) => {
-  const res = await page.request.patch(`${sidecar()}/api/voice/config`, {
-    headers: headers(),
+  const res = await page.request.patch(sidecarUrl("/api/voice/config"), {
+    headers: sidecarHeaders(),
     data: {
       sttProvider: FAKE_PROVIDER,
       sttModel: "whisper-demo",
