@@ -55,7 +55,7 @@ describe("fake JIRA", () => {
     const { comments } = request("GET", `/issue/${ticket.key}/comment`).json as {
       comments: { body: unknown }[];
     };
-    expect(comments.at(-1)?.body).toEqual(adf);
+    expect(comments[comments.length - 1]?.body).toEqual(adf);
   });
 
   it("creates a ticket with the next key in the project", () => {
