@@ -29,6 +29,7 @@ import {
   listWorkspaces,
   type ProvisionEvent,
   provisionWorkspace,
+  renameWorkspace,
   saveWorkspaceRepoFile,
   startArchiveWorkspace,
   unlinkIssue,
@@ -73,6 +74,17 @@ const createWorkspaceSchema = z.object({
   startWork: z.boolean().optional().default(false),
 });
 
+// One line: the name becomes the heading of the AGENTS.md the agent reads, where
+// a line break would start a section of its own.
+const renameWorkspaceSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1)
+    .max(200)
+    .refine((n) => !CONTROL_CHARACTERS.test(n), "name must be a single line"),
+});
+
 // Which of a repo's worktrees a request means, when it isn't the one the
 // workspace was provisioned with. Only a shape check: `resolveWorktree` is the
 // boundary, and it accepts nothing git doesn't list inside the workspace.
@@ -103,7 +115,7 @@ const archiveSchema = z.object({
 
 // The source-agnostic triple identifying an issue across providers.
 const issueRefSchema = z.object({
-  provider: z.enum(["github", "jira"]),
+  provider: z.enum(["github", "jira", "azure"]),
   sourceKey: z.string().min(1).max(256),
   externalId: z.string().min(1).max(256),
 });
@@ -300,6 +312,20 @@ export function createWorkspaceRoutes(config: Config): Hono {
     return c.json(body);
   });
 
+  router.patch("/:id", async (c) => {
+    const id = c.req.param("id");
+    if (!z.string().uuid().safeParse(id).success) {
+      return c.json({ error: "invalid workspace id" }, 400);
+    }
+    const body = await c.req.json().catch(() => null);
+    const parsed = renameWorkspaceSchema.safeParse(body);
+    if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
+    const workspace = await renameWorkspace(db(), id, parsed.data.name);
+    if (!workspace) return c.json({ error: "not found" }, 404);
+    const { pendingBrief: _internal, ...rest } = workspace;
+    return c.json(rest);
+  });
+
   // Drives provisioning and streams progress as SSE. The setup script's output
   // arrives as `log` events; the stream ends with a `done` event. Re-driving a
   // workspace already being provisioned follows the run in flight, so reopening
@@ -339,8 +365,12 @@ export function createWorkspaceRoutes(config: Config): Hono {
   });
 
   // Files / changed-files for a workspace repo's worktree (right-column views).
-  const errorStatus = (e: unknown): 400 | 404 =>
-    e instanceof Error && e.message.includes("not found") ? 404 : 400;
+  const errorStatus = (e: unknown): 400 | 404 | 409 => {
+    if (!(e instanceof Error)) return 400;
+    if (e.message.includes("not found")) return 404;
+    if (e.message.includes("being archived")) return 409;
+    return 400;
+  };
 
   /** The parsed `worktree` query parameter, or the validation error for the
    *  caller to answer 400 with. */
@@ -387,7 +417,7 @@ export function createWorkspaceRoutes(config: Config): Hono {
 
   // The PR on a worktree's branch, read live. The primary worktree's is already
   // cached by the poller; this is for the ones it doesn't watch. Resolving the
-  // worktree fails locally (400/404); the provider call is the one that reaches
+  // worktree fails locally (400/404/409); the provider call is the one that reaches
   // out, so its failure is a 502 and is logged, as the PR routes do.
   router.get("/:id/repos/:wrId/pr", async (c) => {
     if (!z.string().uuid().safeParse(c.req.param("wrId")).success) {

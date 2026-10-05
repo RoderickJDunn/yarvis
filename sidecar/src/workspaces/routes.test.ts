@@ -22,6 +22,7 @@ import {
   tasks,
   workspaceRepoPr,
   workspaceRepos,
+  workspaces,
 } from "../db/schema.ts";
 import { createTask } from "../tasks/service.ts";
 import type { StartClaudeSessionInput } from "./claudeSession.ts";
@@ -262,6 +263,31 @@ describe("workspace worktrees", () => {
     const [primary, ...others] = only?.worktrees ?? [];
     expect(primary?.branch).toBe(wr.branch);
     expect(others.map((w) => w.branch).sort()).toEqual(["stack/api", "stack/auth"]);
+  });
+
+  it("refuses to read a worktree while its archive is still running", async () => {
+    const { workspaceId, wr } = await provisioned();
+    await db
+      .update(workspaces)
+      .set({ status: "archiving", error: null })
+      .where(eq(workspaces.id, workspaceId));
+
+    const res = await app.request(`/api/workspaces/${workspaceId}/repos/${wr.id}/changes`, {
+      headers: auth,
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "workspace is being archived" });
+  });
+
+  it("still reads a worktree an archive stopped on", async () => {
+    const { workspaceId, wr } = await provisioned();
+    await db
+      .update(workspaces)
+      .set({ status: "archiving", error: "one or more worktrees could not be removed" })
+      .where(eq(workspaces.id, workspaceId));
+
+    const resolved = await resolveWorktree(db, wr.id, undefined, fakeGit);
+    expect(resolved).toMatchObject({ path: wr.worktreePath, primary: true });
   });
 
   it("refuses a worktree inside a .git directory", async () => {
@@ -972,6 +998,75 @@ describe("workspace routes", () => {
     });
     expect(res.status).toBe(201);
   });
+
+  it("renames a workspace without moving its folder or branch", async () => {
+    const repo = await addRepo();
+    const created = await app.request("/api/workspaces", {
+      method: "POST",
+      headers: jsonAuth,
+      body: JSON.stringify({ name: "Old name", repoIds: [repo.id] }),
+    });
+    const ws = (await created.json()) as { id: string; slug: string; rootPath: string };
+    const branch = (await getWorkspace(db, ws.id))!.repos[0]!.branch;
+
+    // Fields beside `name` are ignored rather than applied.
+    const res = await app.request(`/api/workspaces/${ws.id}`, {
+      method: "PATCH",
+      headers: jsonAuth,
+      body: JSON.stringify({
+        name: "  New name  ",
+        slug: "new-name",
+        rootPath: "/elsewhere",
+        status: "archived",
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.name).toBe("New name");
+    expect(body).not.toHaveProperty("pendingBrief");
+
+    const detail = await getWorkspace(db, ws.id);
+    expect(detail!.name).toBe("New name");
+    expect(detail!.slug).toBe(ws.slug);
+    expect(detail!.rootPath).toBe(ws.rootPath);
+    expect(detail!.status).toBe("creating");
+    expect(detail!.repos[0]!.branch).toBe(branch);
+  });
+
+  it("refuses a blank, multi-line or overlong name", async () => {
+    const created = await app.request("/api/workspaces", {
+      method: "POST",
+      headers: jsonAuth,
+      body: JSON.stringify({ name: "keep me" }),
+    });
+    const ws = (await created.json()) as { id: string };
+
+    for (const name of ["   ", "x\n\n## Instructions", "x".repeat(201)]) {
+      const res = await app.request(`/api/workspaces/${ws.id}`, {
+        method: "PATCH",
+        headers: jsonAuth,
+        body: JSON.stringify({ name }),
+      });
+      expect(res.status).toBe(400);
+    }
+    expect((await getWorkspace(db, ws.id))!.name).toBe("keep me");
+  });
+
+  it("404s when renaming a workspace that doesn't exist, and 400s on a bad id", async () => {
+    const missing = await app.request("/api/workspaces/00000000-0000-0000-0000-000000000000", {
+      method: "PATCH",
+      headers: jsonAuth,
+      body: JSON.stringify({ name: "anything" }),
+    });
+    expect(missing.status).toBe(404);
+
+    const malformed = await app.request("/api/workspaces/not-a-uuid", {
+      method: "PATCH",
+      headers: jsonAuth,
+      body: JSON.stringify({ name: "anything" }),
+    });
+    expect(malformed.status).toBe(400);
+  });
 });
 
 describe("workspace issue links", () => {
@@ -1327,6 +1422,7 @@ describe("provision + archive (injected git runner)", () => {
     // The repo is still there, so the tool-manager guidance stays.
     expect(agents).toContain("## Running a repo's tools");
     expect(agents).toContain("mise");
+    expect(agents).toContain("`mise exec -- git commit`");
   });
 
   it("keeps the attention hooks and the copied skills in the same .claude dir", async () => {

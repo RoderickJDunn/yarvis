@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getEditorPlace, setEditorPlace } from "../../lib/editorPlaces";
 import { clearDraft, draftKey, getDraft, setDraft, useDraft } from "../../lib/fileDrafts";
 import {
   FileConflictError,
@@ -8,6 +9,7 @@ import {
   workspaceRepoFile,
 } from "../../lib/workspaces";
 import CodeEditor from "../editor/CodeEditor";
+import LoadingIndicator from "../LoadingIndicator";
 
 /**
  * A workspace editor tab's body: one file from a repo's worktree, opened for
@@ -22,6 +24,7 @@ import CodeEditor from "../editor/CodeEditor";
  *
  * The text being edited lives in `fileDrafts`, not in this component, so
  * switching tabs — which unmounts it — doesn't discard what has been typed.
+ * The cursor and scroll position live in `editorPlaces` for the same reason.
  */
 
 const UNREADABLE_REASON: Record<FileUnreadable, string> = {
@@ -222,7 +225,7 @@ export default function WorkspaceFileEditor({
         {loadError ? (
           <p className="p-3 text-xs text-red-400">{loadError}</p>
         ) : file === null ? (
-          <p className="p-3 text-xs text-zinc-500">Loading…</p>
+          <LoadingIndicator className="p-3 text-xs text-zinc-500" />
         ) : file.unreadable ? (
           <p className="p-3 text-xs text-zinc-500">
             {UNREADABLE_REASON[file.unreadable]} ({file.size.toLocaleString()} bytes)
@@ -233,6 +236,8 @@ export default function WorkspaceFileEditor({
             path={path}
             onChange={onChange}
             onSave={() => void save(draft?.baseHash ?? file.hash)}
+            initialPlace={getEditorPlace(key)}
+            onPlaceChange={(place) => setEditorPlace(key, place)}
           />
         )}
       </div>

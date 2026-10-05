@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type ChatSession, listSessions, type ProviderId } from "../lib/chat";
+import { MODEL_HINT, PROVIDER_HINT, SESSION_HINT } from "../lib/chatControlHints";
 import { type DisplayError, formatError } from "../lib/errors";
 import { useOmniChatOverlayOpen } from "../lib/omniChatOverlay";
 import { useChatThread } from "../lib/useChatThread";
-import { useReasoningPreference } from "../lib/useReasoningPreference";
+import { REASONING_HINT, useReasoningPreference } from "../lib/useReasoningPreference";
 import { useVoice } from "../lib/useVoice";
 import ChatComposer from "./ChatComposer";
 import ChatMessages from "./ChatMessages";
 import ErrorNotice from "./ErrorNotice";
+import McpConnectionBar from "./McpConnectionBar";
 import ToolApprovalBar from "./ToolApprovalBar";
 import VoiceControls from "./voice/VoiceControls";
 
@@ -18,8 +20,19 @@ const EMPTY_HINT =
  * The Chat tab: a thread plus the session picker the overlay doesn't have.
  * Everything about running a turn — providers, streaming, approvals, errors —
  * belongs to `useChatThread`, so both chat surfaces behave identically.
+ *
+ * `active` is false while the host keeps the panel mounted but off screen, so a
+ * turn keeps streaming after the user switches away. `sessionStorageKey`
+ * reopens the last session on mount; each mounted instance needs its own key,
+ * or they overwrite each other's.
  */
-export default function ChatPanel() {
+export default function ChatPanel({
+  active = true,
+  sessionStorageKey,
+}: {
+  active?: boolean;
+  sessionStorageKey?: string;
+}) {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [sessionsError, setSessionsError] = useState<DisplayError | null>(null);
   const [input, setInput] = useState("");
@@ -49,10 +62,11 @@ export default function ChatPanel() {
     alwaysAllow,
     send,
     retry,
+    rewind,
     stop,
     newChat,
     loadSession,
-  } = useChatThread({ onSessionCreated: addSession, reasoning });
+  } = useChatThread({ onSessionCreated: addSession, reasoning, sessionStorageKey });
 
   const voice = useVoice({ send, streaming, busy });
 
@@ -60,22 +74,41 @@ export default function ChatPanel() {
   // own, so ours must stop answering the keyboard while it is up.
   const overlayOpen = useOmniChatOverlayOpen();
 
+  // A hands-free mic left open behind another tab would send what it hears into
+  // a chat nobody is looking at.
+  const { cancel: cancelVoice } = voice;
   useEffect(() => {
+    if (!active) cancelVoice();
+  }, [active, cancelVoice]);
+
+  // Refetched on each return to the panel: sessions other surfaces created, and
+  // titles the sidecar assigned, arrive while it sits hidden. Merged rather than
+  // replaced, so a session this panel created while the fetch was in flight
+  // stays in the picker.
+  useEffect(() => {
+    if (!active) return;
     void (async () => {
       try {
-        setSessions(await listSessions());
+        const listed = await listSessions();
+        setSessions((prev) => {
+          const ids = new Set(listed.map((s) => s.id));
+          return [...prev.filter((s) => !ids.has(s.id)), ...listed];
+        });
       } catch (e) {
         setSessionsError(formatError(e));
       }
     })();
-  }, []);
+  }, [active]);
 
-  // Keep the thread pinned to the newest message as it grows. The body doesn't
-  // read messages/streaming, but the effect must re-run as the thread does.
+  // Keep the thread pinned to the newest message as it grows; skipped while
+  // hidden (a layout read+write per streamed token) and re-pinned on return.
+  // The body doesn't read messages/streaming, but the effect must re-run as the
+  // thread does.
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-run on thread growth
   useEffect(() => {
+    if (!active) return;
     threadRef.current?.scrollTo(0, threadRef.current.scrollHeight);
-  }, [messages, streaming, activity]);
+  }, [active, messages, streaming, activity]);
 
   // Clear only once the turn is under way: `send` declines while the provider
   // list is still loading, and a message that vanished without being sent is
@@ -97,6 +130,7 @@ export default function ChatPanel() {
           New chat
         </button>
         <select
+          title={SESSION_HINT}
           value={sessionId ?? ""}
           onChange={(e) => e.target.value && void loadSession(e.target.value)}
           className="rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm"
@@ -109,7 +143,7 @@ export default function ChatPanel() {
           ))}
         </select>
         <div className="ml-auto flex items-center gap-2">
-          <label className="flex items-center gap-1 text-xs text-zinc-400">
+          <label title={REASONING_HINT} className="flex items-center gap-1 text-xs text-zinc-400">
             <input
               type="checkbox"
               checked={reasoning}
@@ -118,6 +152,7 @@ export default function ChatPanel() {
             Thinking
           </label>
           <select
+            title={PROVIDER_HINT}
             value={provider}
             onChange={(e) => {
               const id = e.target.value as ProviderId;
@@ -134,6 +169,7 @@ export default function ChatPanel() {
             ))}
           </select>
           <select
+            title={MODEL_HINT}
             value={model}
             onChange={(e) => setModel(e.target.value)}
             className="rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm"
@@ -158,12 +194,14 @@ export default function ChatPanel() {
           emptyHint={EMPTY_HINT}
           thinking={thinking}
           activity={activity}
+          onRewind={rewind}
         />
       </div>
 
+      {/* Off screen, an `A` would answer a call nobody can see. */}
       <ToolApprovalBar
         approvals={approvals}
-        visible={!overlayOpen}
+        visible={active && !overlayOpen}
         onRespond={(id, approved) => void respondApproval(id, approved)}
         onAlwaysAllow={(a) => void alwaysAllow(a)}
       />
@@ -186,6 +224,8 @@ export default function ChatPanel() {
           }
         />
       )}
+
+      <McpConnectionBar />
 
       <ChatComposer
         value={input}

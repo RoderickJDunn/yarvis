@@ -13,6 +13,7 @@ import {
   getWorkspace,
   ignoreWorkspaceError,
   listWorkspaces,
+  renameWorkspace,
   unlinkWorkspaceIssue,
   unlinkWorkspaceTask,
   type WorkspaceDetail,
@@ -21,6 +22,7 @@ import {
   type WorkspaceStatus,
   type WorkspaceSummary,
 } from "../lib/workspaces";
+import LoadingIndicator from "./LoadingIndicator";
 import CopyPathButton from "./pr/CopyPathButton";
 import RefreshingIndicator from "./RefreshingIndicator";
 import SplitPane, { usePersistedRatio } from "./SplitPane";
@@ -45,6 +47,7 @@ import LinkWorkModal from "./workspaces/LinkWorkModal";
 import { provisionActions, setupLogToAutoOpen } from "./workspaces/provisionActions";
 import { consumeProvision } from "./workspaces/provisionStream";
 import WorkspaceFileDiff from "./workspaces/WorkspaceFileDiff";
+import WorkspaceNameHeading from "./workspaces/WorkspaceNameHeading";
 import WorkspacePrBadges from "./workspaces/WorkspacePrBadges";
 import WorkspacePrStatus from "./workspaces/WorkspacePrStatus";
 import WorkspaceSetupLog from "./workspaces/WorkspaceSetupLog";
@@ -62,8 +65,23 @@ const STATUS_STYLES: Record<WorkspaceStatus, string> = {
   error: "bg-red-900/40 text-red-200",
 };
 
+const STATUS_HINTS: Record<WorkspaceStatus, string> = {
+  creating: "Setting up the workspace's worktrees.",
+  active: "Set up and ready to work in.",
+  archiving: "Removing the workspace's worktrees; any that could not be removed show an error.",
+  archived: "Archived; its worktrees have been removed.",
+  error: "Something went wrong setting up or archiving the workspace; see its repos for details.",
+};
+
 function StatusBadge({ status }: { status: WorkspaceStatus }) {
-  return <span className={`rounded px-1.5 py-0.5 text-xs ${STATUS_STYLES[status]}`}>{status}</span>;
+  return (
+    <span
+      title={STATUS_HINTS[status]}
+      className={`rounded px-1.5 py-0.5 text-xs ${STATUS_STYLES[status]}`}
+    >
+      {status}
+    </span>
+  );
 }
 
 const REPO_STATUS_STYLES: Record<WorkspaceRepoStatus, string> = {
@@ -74,9 +92,22 @@ const REPO_STATUS_STYLES: Record<WorkspaceRepoStatus, string> = {
   error: "bg-red-900/40 text-red-200",
 };
 
+const REPO_STATUS_HINTS: Record<WorkspaceRepoStatus, string> = {
+  pending: "Waiting for its worktree to be set up.",
+  provisioning: "Creating the worktree and running the setup script.",
+  ready: "The worktree is set up and ready.",
+  removed: "The worktree has been removed.",
+  error: "Setting up or removing the worktree failed.",
+};
+
 function RepoStatusBadge({ status }: { status: WorkspaceRepoStatus }) {
   return (
-    <span className={`rounded px-1.5 py-0.5 text-xs ${REPO_STATUS_STYLES[status]}`}>{status}</span>
+    <span
+      title={REPO_STATUS_HINTS[status]}
+      className={`rounded px-1.5 py-0.5 text-xs ${REPO_STATUS_STYLES[status]}`}
+    >
+      {status}
+    </span>
   );
 }
 
@@ -391,7 +422,10 @@ export default function WorkspacesPanel({
                           {/* Marks a workspace asking for the user while they're
                               looking at a different one. */}
                           {needsAttention && (
-                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
+                            <span
+                              title="Needs you"
+                              className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400"
+                            />
                           )}
                           <span className="truncate">{ws.name}</span>
                         </span>
@@ -746,12 +780,14 @@ function InlineRepoCreator({
     <div className="mt-2 space-y-2 rounded-lg border border-zinc-700 bg-zinc-900 p-3">
       <input
         value={cloneUrl}
+        aria-label="Git clone URL"
         placeholder="git@github.com:owner/repo.git"
         onChange={(e) => setCloneUrl(e.target.value)}
         className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm outline-none focus:border-zinc-500"
       />
       <input
         value={name}
+        aria-label="Display name"
         placeholder="Display name (optional)"
         onChange={(e) => setName(e.target.value)}
         className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm outline-none focus:border-zinc-500"
@@ -982,6 +1018,16 @@ function WorkspaceDetailView({
     }
   }, [id, load, onChanged]);
 
+  // Errors propagate so the heading can show them beside the field.
+  const rename = useCallback(
+    async (name: string) => {
+      await renameWorkspace(id, name);
+      await load();
+      onChanged();
+    },
+    [id, load, onChanged],
+  );
+
   // Auto-provision a workspace whose kick-off is still running. The sidecar
   // drives it whether or not anyone is here, so this only joins the run already
   // going — which is what puts its log on screen. The ref stops it re-firing on
@@ -1067,7 +1113,7 @@ function WorkspaceDetailView({
   }, [agentActive, startAgent]);
 
   if (error) return <p className="p-6 text-sm text-red-400">{error}</p>;
-  if (!detail) return <p className="p-6 text-sm text-zinc-500">Loading…</p>;
+  if (!detail) return <LoadingIndicator className="p-6 text-sm text-zinc-500" />;
 
   const provisioned = detail.status === "active";
   const actions = provisionActions(detail);
@@ -1085,7 +1131,7 @@ function WorkspaceDetailView({
     <div className="relative flex h-full min-h-0 flex-col">
       <div className="shrink-0 border-b border-zinc-800 px-4 py-2">
         <div className="flex items-center gap-2">
-          <h2 className="text-sm font-medium text-zinc-100">{detail.name}</h2>
+          <WorkspaceNameHeading name={detail.name} onRename={rename} />
           <StatusBadge status={detail.status} />
           <span className="ml-auto truncate font-mono text-xs text-zinc-500">
             {detail.rootPath}
@@ -1348,7 +1394,7 @@ function WorkspaceDetailView({
                   // "Overwrite with mine" would then write those contents to
                   // this file, with a hash fresh enough to pass the guard.
                   renderFileEditor={({ repoId, path, worktree }) => (
-                    <Suspense fallback={<p className="p-3 text-xs text-zinc-500">Loading…</p>}>
+                    <Suspense fallback={<LoadingIndicator className="p-3 text-xs text-zinc-500" />}>
                       <WorkspaceFileEditor
                         key={fileKey(repoId, path, worktree)}
                         workspaceId={detail.id}
@@ -1418,12 +1464,18 @@ function WorkspaceDetailView({
             );
           })()}
           second={
-            <WorkspaceSidePanel
-              workspaceId={detail.id}
-              repos={detail.repos}
-              onOpenFile={setDiffRequest}
-              onEditFile={setEditorRequest}
-            />
+            // The side panel polls git in worktrees the archive is deleting, which
+            // the sidecar refuses until the teardown lands or stops.
+            archiveRunning ? (
+              <p className="p-3 text-xs text-zinc-500">Removing worktrees…</p>
+            ) : (
+              <WorkspaceSidePanel
+                workspaceId={detail.id}
+                repos={detail.repos}
+                onOpenFile={setDiffRequest}
+                onEditFile={setEditorRequest}
+              />
+            )
           }
         />
       )}

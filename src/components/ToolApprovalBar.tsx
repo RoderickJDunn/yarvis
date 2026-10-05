@@ -31,7 +31,7 @@ export default function ToolApprovalBar({
   onAlwaysAllow?: (approval: PendingApproval) => void;
   /**
    * False while the host is mounted but this bar isn't on screen — a hidden
-   * Omni Chat keeps streaming, and its shortcuts must not answer for it.
+   * Omni Chat or Chat tab keeps streaming, and its shortcuts must not answer for it.
    */
   visible?: boolean;
 }) {
@@ -39,12 +39,15 @@ export default function ToolApprovalBar({
   const [armed, setArmed] = useState(false);
   const current = approvals[0];
 
+  // Also re-arms on coming back into view: a call that arrived while the host
+  // was hidden would otherwise be answerable the instant it first appears.
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-arm per call
   useEffect(() => {
     setArmed(false);
+    if (!visible) return;
     const timer = setTimeout(() => setArmed(true), ARMING_MS);
     return () => clearTimeout(timer);
-  }, [current?.id]);
+  }, [current?.id, visible]);
 
   // Answer without leaving the composer. Ignored while the user is typing, so
   // an "a" in a sentence never approves anything.
@@ -89,6 +92,7 @@ export default function ToolApprovalBar({
             type="button"
             onClick={() => setShowArgs((v) => !v)}
             aria-expanded={showArgs}
+            title="Show or hide the arguments this call will run with."
             className="rounded border border-zinc-700 px-1.5 py-0.5 text-xs text-zinc-400 hover:bg-zinc-800"
           >
             {showArgs ? "Hide arguments" : "Arguments"}
@@ -99,6 +103,7 @@ export default function ToolApprovalBar({
             <button
               type="button"
               onClick={() => onAlwaysAllow?.(current)}
+              title="Approve this call and skip the prompt for this tool on future typed turns (not spoken ones)."
               className="rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-800"
             >
               Always allow
@@ -107,6 +112,7 @@ export default function ToolApprovalBar({
           <button
             type="button"
             onClick={() => onRespond(current.id, true)}
+            title="Approve this call (press A when not typing in a field)."
             className="rounded-md bg-indigo-600 px-3 py-1 text-xs font-medium hover:bg-indigo-500"
           >
             Approve <span className="text-indigo-200">A</span>
@@ -114,6 +120,7 @@ export default function ToolApprovalBar({
           <button
             type="button"
             onClick={() => onRespond(current.id, false)}
+            title="Deny this call (press D when not typing in a field)."
             className="rounded-md border border-zinc-700 px-3 py-1 text-xs text-zinc-300 hover:bg-zinc-800"
           >
             Deny <span className="text-zinc-500">D</span>

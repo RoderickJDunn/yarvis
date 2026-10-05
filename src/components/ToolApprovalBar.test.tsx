@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { useState } from "react";
 import type { PendingApproval } from "../lib/chat";
 import { mountForInteraction, renderToHtml, textOf } from "../test/render";
 import ToolApprovalBar from "./ToolApprovalBar";
@@ -112,6 +113,35 @@ describe("ToolApprovalBar", () => {
     expect(answered).toEqual([]);
   });
 
+  // A call that arrived while the host was hidden has sat there unseen, so the
+  // moment it comes into view is its first moment on screen.
+  it("re-arms when a hidden bar comes back into view", async () => {
+    const answered: Array<[string, boolean]> = [];
+    let show: () => void = () => {};
+    function Host() {
+      const [visible, setVisible] = useState(false);
+      show = () => setVisible(true);
+      return (
+        <ToolApprovalBar
+          approvals={[approval()]}
+          onRespond={(id, ok) => answered.push([id, ok])}
+          visible={visible}
+        />
+      );
+    }
+    const mounted = await mountForInteraction(<Host />, 500);
+    cleanup = mounted.unmount;
+
+    show();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
+    expect(answered).toEqual([]);
+
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
+    expect(answered).toEqual([["call-1", true]]);
+  });
+
   it("ignores those keys while the user is typing", async () => {
     const answered: Array<[string, boolean]> = [];
     const mounted = await mountForInteraction(
@@ -124,6 +154,14 @@ describe("ToolApprovalBar", () => {
     composer.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
     composer.remove();
     expect(answered).toEqual([]);
+  });
+
+  it("names the keyboard shortcut in the Approve and Deny tooltips", async () => {
+    const html = await renderToHtml(
+      <ToolApprovalBar approvals={[approval()]} onRespond={() => {}} />,
+    );
+    expect(html).toContain("press A");
+    expect(html).toContain("press D");
   });
 
   it("offers to remember an MCP tool, but not a built-in", async () => {

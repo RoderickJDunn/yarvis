@@ -12,6 +12,8 @@ export type ModelCapability = "chat" | "stt" | "tts" | "vision" | "embed";
 export interface ModelInfo {
   id: string;
   capabilities: ModelCapability[];
+  /** Estimated tokens past which a chat on this model is summarized; absent uses the global setting. */
+  compactAtTokens?: number;
 }
 
 export interface ProviderInfo {
@@ -74,6 +76,8 @@ export interface ChatMessage {
 
 /** A message as rendered in a thread: its persisted role, text and provenance. */
 export interface ThreadMessage {
+  /** The persisted message id. Absent until the thread has re-read the transcript. */
+  id?: string;
   role: string;
   content: string;
   metadata?: ChatMessageMetadata | null;
@@ -193,6 +197,8 @@ export interface ChatRequest {
   source?: "voice";
   /** Ask the provider to stream the model's reasoning, where it supports it. */
   reasoning?: boolean;
+  /** Restart from this persisted user message: it and everything after it are dropped first. */
+  rewindTo?: string;
 }
 
 /** Responds to a pending MCP tool-call approval mid-stream. */
@@ -232,6 +238,8 @@ export interface ChatConfig {
   maxOutputTokens: number | null;
   /** How much of each tool result the chat keeps to show; the model sees all of it. */
   toolResultChars: number;
+  /** Estimated history size, in tokens, past which older messages are summarized. */
+  compactAtTokens: number;
 }
 
 export async function getChatConfig(): Promise<ChatConfig> {

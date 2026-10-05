@@ -53,6 +53,11 @@ export interface ChatMessageMetadata {
   telegramUserId?: number;
   telegramUsername?: string;
   telegramFirstName?: string;
+  /**
+   * Set on the `system` row that stands in for the start of a long chat. The
+   * row's content is the summary; replay resumes after `throughMessageId`.
+   */
+  compaction?: { throughMessageId: string };
 }
 
 /**
@@ -699,7 +704,7 @@ export const issueLinks = pgTable(
   "issue_links",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    provider: text("provider").notNull(), // "github" | "jira"
+    provider: text("provider").notNull(), // "github" | "jira" | "azure"
     sourceKey: text("source_key").notNull(), // github: "owner/repo"; jira: project key
     externalId: text("external_id").notNull(), // github: issue number; jira: issue key
     title: text("title"),

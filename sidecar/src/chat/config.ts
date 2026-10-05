@@ -1,3 +1,5 @@
+import type { Config } from "../config.ts";
+import { modelCompactAtTokens } from "../llm/providers.ts";
 import { readSection, withSection } from "../settings/store.ts";
 
 /**
@@ -18,6 +20,13 @@ export interface ChatConfig {
    * how much of it a person can read back, so it is raised when debugging a tool.
    */
   toolResultChars: number;
+  /**
+   * Estimated history size, in tokens, past which the older messages are
+   * summarized. Set it under the smallest context window of any model you chat
+   * with: the estimate is rough, and the system prompt, tools and reply come on
+   * top of it.
+   */
+  compactAtTokens: number;
 }
 
 const SETTINGS_KEY = "chatConfig";
@@ -34,13 +43,16 @@ export const DEFAULT_CHAT_CONFIG: ChatConfig = {
   maxSteps: 100,
   maxOutputTokens: null,
   toolResultChars: 400,
+  compactAtTokens: 200_000,
 };
 
-/** Ceilings the routes validate against, so a typo can't cost a fortune. */
+/** Bounds the routes validate against, so a typo can't cost a fortune. */
 export const MAX_STEPS_CEILING = 500;
 export const MAX_OUTPUT_TOKENS_CEILING = 200_000;
 /** `read_browser_page` returns at most 60,000 characters, so this keeps a whole one plus its wrapping. */
 export const MAX_TOOL_RESULT_CHARS_CEILING = 100_000;
+export const MIN_COMPACT_AT_TOKENS = 10_000;
+export const MAX_COMPACT_AT_TOKENS = 2_000_000;
 
 /** Returns the stored budget merged over the defaults. */
 export async function getChatConfig(): Promise<ChatConfig> {
@@ -50,7 +62,24 @@ export async function getChatConfig(): Promise<ChatConfig> {
     maxSteps: stored.maxSteps ?? DEFAULT_CHAT_CONFIG.maxSteps,
     maxOutputTokens: stored.maxOutputTokens ?? DEFAULT_CHAT_CONFIG.maxOutputTokens,
     toolResultChars: stored.toolResultChars ?? DEFAULT_CHAT_CONFIG.toolResultChars,
+    compactAtTokens: stored.compactAtTokens ?? DEFAULT_CHAT_CONFIG.compactAtTokens,
   };
+}
+
+/**
+ * The budget for a turn on one model: the stored settings, with the model's own
+ * compaction threshold taking over the global one when it has one.
+ */
+export async function getChatBudget(
+  config: Config,
+  provider: string,
+  model: string,
+): Promise<ChatConfig> {
+  const [budget, perModel] = await Promise.all([
+    getChatConfig(),
+    modelCompactAtTokens(config, provider, model),
+  ]);
+  return perModel === undefined ? budget : { ...budget, compactAtTokens: perModel };
 }
 
 /** Stores the budget as the whole section, replacing whatever was there. */
@@ -60,6 +89,7 @@ export async function saveChatConfig(input: ChatConfig): Promise<ChatConfig> {
       maxSteps: input.maxSteps,
       maxOutputTokens: input.maxOutputTokens ?? null,
       toolResultChars: input.toolResultChars,
+      compactAtTokens: input.compactAtTokens,
     };
     return { next, result: next };
   });

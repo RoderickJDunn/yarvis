@@ -6,7 +6,7 @@ import {
   mergePr,
   type ReviewAction,
 } from "../../lib/pr/api";
-import { invalidate, prDetailKey, prStackKey } from "../../lib/pr/cache";
+import { invalidate, invalidatePrReview, prDetailKey, prStackKey } from "../../lib/pr/cache";
 import { refDisplayRepo, refNumber, refProviderName } from "../../lib/pr/ref";
 import type { CheckItem, MergeMethod, PrDetail, PrRef, PrSummary } from "../../lib/pr/types";
 import { openExternal } from "../../lib/url";
@@ -108,6 +108,7 @@ function CommentPrompt({
         ref={textareaRef}
         value={text}
         placeholder={placeholder}
+        aria-label={`${label} comment`}
         onChange={(e) => setText(e.target.value)}
         rows={3}
         className="w-72 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm outline-none focus:border-zinc-500"
@@ -196,6 +197,9 @@ const MERGE_METHOD_LABEL: Record<MergeMethod, string> = {
   REBASE: "Rebase and merge",
 };
 
+/** Why a header button is greyed out: the only reason is another action in flight. */
+const BUSY_TITLE = "Another action on this PR is still in progress";
+
 /** Which merge controls the header should offer for the current PR. */
 export interface MergeControls {
   /** Merge now (PR is mergeable and checks are green). */
@@ -233,6 +237,7 @@ export function mergeControlsFor(detail: PrDetail | null, status: PrUiStatus): M
  */
 function MergeMenu({
   label,
+  title,
   className,
   methods,
   pending,
@@ -242,6 +247,8 @@ function MergeMenu({
   onPick,
 }: {
   label: string;
+  /** Says what the button does; replaced by the busy reason while disabled. */
+  title: string;
   className: string;
   methods: MergeMethod[];
   pending: boolean;
@@ -256,6 +263,7 @@ function MergeMenu({
         type="button"
         onClick={onToggle}
         disabled={disabled}
+        title={disabled ? BUSY_TITLE : title}
         className={`rounded-md px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-colors disabled:opacity-50 ${className}`}
       >
         {pending ? "…" : label}
@@ -292,7 +300,10 @@ export default function PrFloatingHeader({
   pr,
   detail,
   loading = false,
+  refreshing = false,
   onBack,
+  starred,
+  onToggleStar,
 }: {
   pr: PrSummary;
   detail: PrDetail | null;
@@ -303,7 +314,11 @@ export default function PrFloatingHeader({
    * nothing (#268).
    */
   loading?: boolean;
+  /** Whether a reload is running behind a detail already on screen. */
+  refreshing?: boolean;
   onBack: () => void;
+  starred: boolean;
+  onToggleStar: (pr: PrSummary, starred: boolean) => Promise<void>;
 }) {
   const prRef: PrRef = pr.ref;
   // Publishing, approving or merging changes both how this pull request reads
@@ -320,11 +335,16 @@ export default function PrFloatingHeader({
   // review in flight don't clobber each other's spinner.
   const [mergeMenu, setMergeMenu] = useState<null | "merge" | "auto_merge">(null);
   const [mergePending, setMergePending] = useState(false);
+  const [starPending, setStarPending] = useState(false);
+  // The summary's title can be empty when the entry came from the workspace
+  // poller cache, which doesn't store PR titles, so prefer the detail's.
+  const title = detail?.title || pr.title;
 
   const status = derivePrUiStatus(detail, pr);
   const actions = actionsForStatus(status);
   const mergeControls = mergeControlsFor(detail, status);
   const busy = pending !== null || mergePending;
+  const isReloading = loading || refreshing;
 
   const run = async (action: ReviewAction, body?: string) => {
     setPending(action);
@@ -368,6 +388,18 @@ export default function PrFloatingHeader({
     }
   };
 
+  const toggleStar = async () => {
+    setStarPending(true);
+    setError(null);
+    try {
+      await onToggleStar({ ...pr, title }, starred);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setStarPending(false);
+    }
+  };
+
   return (
     <div aria-busy={loading} className="shrink-0 border-b border-zinc-800 bg-[#0a0a0a] px-6 py-3">
       <div className="flex items-center gap-3">
@@ -379,17 +411,21 @@ export default function PrFloatingHeader({
         </button>
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">
-            {/* Prefer the detail's title — the summary's title can be empty
-                when the entry came from the workspace poller cache (which
-                doesn't store PR titles). Show a placeholder while detail
-                loads so the bar isn't blank. */}
-            <h2
-              className="min-w-0 truncate text-base font-semibold text-zinc-100"
-              title={detail?.title || pr.title}
+            <button
+              type="button"
+              onClick={() => void toggleStar()}
+              disabled={starPending}
+              className={`shrink-0 disabled:opacity-50 ${
+                starred ? "text-amber-400" : "text-zinc-600 hover:text-zinc-400"
+              }`}
+              title={starred ? "Unstar" : "Star"}
+              aria-pressed={starred}
             >
-              {detail?.title || pr.title || (
-                <span className="font-normal italic text-zinc-500">Loading…</span>
-              )}
+              ★
+            </button>
+            {/* Show a placeholder while detail loads so the bar isn't blank. */}
+            <h2 className="min-w-0 truncate text-base font-semibold text-zinc-100" title={title}>
+              {title || <span className="font-normal italic text-zinc-500">Loading…</span>}
             </h2>
             <span className="font-normal text-zinc-500">#{refNumber(prRef)}</span>
           </div>
@@ -418,6 +454,7 @@ export default function PrFloatingHeader({
                 <button
                   onClick={onClick}
                   disabled={busy}
+                  title={busy ? BUSY_TITLE : undefined}
                   className={`rounded-md px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-colors disabled:opacity-50 ${cfg.className}`}
                 >
                   {isPending ? "…" : cfg.label}
@@ -438,13 +475,17 @@ export default function PrFloatingHeader({
             );
           })}
           {detail?.autoMergeEnabled && (
-            <span className="rounded bg-sky-900/60 px-2 py-0.5 text-xs font-medium text-sky-200">
+            <span
+              className="rounded bg-sky-900/60 px-2 py-0.5 text-xs font-medium text-sky-200"
+              title="This PR will merge on its own once its required checks and reviews pass"
+            >
               Auto-merge on
             </span>
           )}
           {mergeControls.merge && detail && (
             <MergeMenu
               label="Merge"
+              title="Merge this PR now, using the method you pick"
               className="bg-emerald-600 hover:bg-emerald-500"
               methods={detail.mergeMethods}
               pending={mergePending}
@@ -457,6 +498,7 @@ export default function PrFloatingHeader({
           {mergeControls.enableAuto && detail && (
             <MergeMenu
               label="Enable auto-merge"
+              title="Merge this PR automatically once its required checks and reviews pass, using the method you pick"
               className="bg-sky-600 hover:bg-sky-500"
               methods={detail.mergeMethods}
               pending={mergePending}
@@ -471,11 +513,29 @@ export default function PrFloatingHeader({
               type="button"
               onClick={() => void runDisableAutoMerge()}
               disabled={busy}
+              title={
+                busy ? BUSY_TITLE : "Turn off auto-merge so this PR no longer merges on its own"
+              }
               className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 transition-colors hover:bg-zinc-800 disabled:opacity-50"
             >
               {mergePending ? "…" : "Cancel auto-merge"}
             </button>
           )}
+          <button
+            type="button"
+            onClick={() => invalidatePrReview(prRef)}
+            disabled={isReloading}
+            className="rounded-md border border-zinc-700 px-2 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+            title="Refresh this pull request"
+            aria-label="Refresh this pull request"
+          >
+            <span
+              aria-hidden="true"
+              className={`inline-block ${isReloading ? "animate-spin" : ""}`}
+            >
+              ↻
+            </span>
+          </button>
           <button
             onClick={() => openExternal(pr.url)}
             className="rounded-md border border-zinc-700 px-2 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800"

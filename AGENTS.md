@@ -7,8 +7,8 @@ Guidance for AI agents building features in this repo.
 Yarvis is a personal-assistant desktop app for macOS, built with Tauri v2: an
 LLM chat interface with memory, a spoken (STT/TTS) front end to the same agent,
 work tracking, PR review, calendar, and workspace/git-worktree management. See
-`README.md` for the full user-facing setup and feature docs — this file is about
-working in the codebase.
+`docs/getting-started.md` for setup and `docs/features/` for the user-facing
+feature docs — this file is about working in the codebase.
 
 ## Architecture
 
@@ -33,8 +33,16 @@ Three processes, each with a clean ownership boundary:
   remote-control bot.
 
 Data lives in local **PostgreSQL + pgvector**; small structural settings live
-in `~/.yarvis/settings.json` instead. See `README.md`'s "Project layout"
-section for a directory-by-directory map of both `src/` and `sidecar/src/`.
+in `~/.yarvis/settings.json` instead. See `docs/development.md`'s "Project
+layout" section for a directory-by-directory map of both `src/` and
+`sidecar/src/`. A user-visible behavior change updates the matching page in
+`docs/features/` (or `docs/configuration.md` for settings and secrets). Those
+pages are also what the in-app `yarvis-guide` specialist answers from:
+`sidecar/src/help/docs.ts` embeds them with `with { type: "text" }`, so a new
+user-facing page is added to its `DOCS` map too (`help/docs.test.ts` catches a
+missing `docs/features/` page, not a new top-level one). The guide's prompt
+lists every `yarvis://` address by hand; `src/lib/appPlace.test.ts` fails when
+a nav or Settings tab is added, renamed or removed without updating it.
 
 ## Commands
 
@@ -47,6 +55,9 @@ bun run tauri dev                # full app: frontend + Rust core + sidecar
 bun run dev:instance <name>       # a second app beside the primary one; add
                                   #   YARVIS_DATABASE_URL to give it its own DB
 bun run sidecar:dev               # sidecar only (prints a dev bearer token)
+bun run demo                      # screenshots + video of the real UI in
+                                  #   Chromium, Rust core mocked; see
+                                  #   demo/README.md
 
 bun run test                      # frontend tests (src/, happy-dom) + the
                                   #   dev-script tests (scripts/)
@@ -114,6 +125,11 @@ back to ad-hoc.
 - Sidecar tests that touch storage hit a real Postgres — see `sidecar/src/workspaces/routes.test.ts`
   for the pattern (temp workspaces root via `mkdtempSync`, `TRUNCATE` between
   tests, injected fake git runners to avoid real network/filesystem git ops).
+  Anything stored in `settings.json` is not in Postgres, so `TRUNCATE` doesn't
+  reset it: give the test its own `YARVIS_SETTINGS_PATH` (see
+  `sidecar/src/customProviders/routes.test.ts`). The preload in
+  `sidecar/src/test/setup.ts` points the whole suite at a temp file, so a test
+  that forgets never writes the user's real one.
 - Secrets (provider API keys, tokens, DB URL) are entered in the app's
   Settings screen and stored in a single item — never in env files or
   committed anywhere. Which store holds that item, the macOS Keychain or a
@@ -163,6 +179,12 @@ back to ad-hoc.
   the tools in `codeTools.ts` are written once and GitHub/Azure each supply an
   implementation. A capability one provider lacks resolves to `null` so the
   caller can say so, rather than throwing.
+- A GitHub or Google client is built with `createGitHubClient(config, token)` or
+  `createGoogleCalendarClient(config)`, never its constructor. The factories are
+  where the demo's endpoint overrides apply, so a bare `new GitHubClient(token)`
+  would send the demo's placeholder token, or a dev's real one, to the real
+  service. The overrides themselves are refused by the Rust core
+  (`ENDPOINT_OVERRIDE_VARS` in `sidecar.rs`) and accepted only for loopback URLs.
 - Stacked pull requests have two sources and neither is optional: the CLI
   decides membership, the API decides each layer's status, and either being
   absent degrades rather than fails. `sidecar/src/workspaces/stack.ts` explains
@@ -292,9 +314,10 @@ back to ad-hoc.
   mechanism gives MCP tools to a surface that cannot prompt: that still requires
   `approval` hooks to exist at all.
 - A list a tab shows is read through `lib/resourceCache`, not fetched into local
-  state on mount. `App` renders one panel at a time, so every tab switch unmounts
-  a page outright, and the fetch-on-mount shape meant coming back always painted
-  an empty list first (#275). `useCachedResource` seeds a remount from the cache
+  state on mount. `App` renders one panel at a time (the Chat tab aside, kept
+  mounted so a turn outlives the switch), so a tab switch unmounts a page
+  outright, and the fetch-on-mount shape meant coming back always painted an
+  empty list first (#275). `useCachedResource` seeds a remount from the cache
   synchronously and revalidates behind it, which is why `Resource` distinguishes
   `refreshing` — a load running behind data already on screen, what
   `RefreshingIndicator` shows — from `loading`, which means there is nothing to
@@ -335,10 +358,10 @@ back to ad-hoc.
   above the composer, showing the front of the queue with a count, rather than a
   card per call inside the thread. Its `A`/`D` shortcuts are on `window`, so a
   bar the host is keeping off screen must be told — `visible` — or it answers
-  for a surface the user cannot see: Omni Chat stays mounted and streaming while
-  hidden, and the overlay covers a `ChatPanel` that has a bar of its own
-  (`lib/omniChatOverlay.ts`). Anything else that mounts a second bar owes the
-  same gate.
+  for a surface the user cannot see: Omni Chat and the Chat tab stay mounted and
+  streaming while hidden, and the overlay covers a `ChatPanel` that has a bar of
+  its own (`lib/omniChatOverlay.ts`). Anything else that mounts a second bar owes
+  the same gate.
 - Stopping a turn is the user's own doing, and both layers say so. The AI SDK
   ends its iteration normally on an abort rather than throwing, so `runAgentTurn`
   checks the abort *before* the empty-turn branch and saves nothing; the surface
@@ -364,6 +387,18 @@ back to ad-hoc.
   raise a limit they already raised. The specialists' own ceiling in
   `agents/catalog.ts` is deliberately separate and lower: a delegated run has no
   approval channel, so it is not covered by a setting the chat surfaces share.
+- A chat that outgrows the model's window is compacted, not truncated.
+  `chat/compaction.ts` summarizes the older messages into a `system` row whose
+  `metadata.compaction.throughMessageId` names the last one it covers, and
+  `runAgentTurn` replays that summary (fenced as data) plus what came after. No
+  row is deleted, and the messages route hides the `system` row, so the thread
+  the user sees is unchanged. The size that triggers it is `compactAtTokens` in
+  `chat/config.ts` (default 200k, edited in Settings). A model can carry its own
+  on its catalogue entry (`ModelInfo.compactAtTokens`, bundled defaults set under
+  each model's window), which wins over the global value: the right number is a
+  property of the model's window, and `getChatBudget` resolves it per turn. A context-window error
+  compacts too, so Retry succeeds. The retry collapse in `runAgentTurn` skips `system` rows when it
+  looks for the last message, since a summary can land after the user's turn.
 - A chat turn reports what it is doing, not only what it concluded.
   `runAgentTurn` drives `fullStream`, so tool calls, their outcomes and any
   reasoning the provider returns reach the surface as they happen; the tool
