@@ -178,15 +178,6 @@ from the UI rather than by hand.
 `githubPrConfig` and `jobConfig` are read as whole objects. If you edit them by
 hand, include every field, as the example file does.
 
-> **Known issue.** Saving a setting the Rust core owns (the agent command,
-> the terminal cap, the Azure, JIRA, Google or Telegram fields, or the secret
-> store) rewrites the file with only the Rust core's keys. That drops the
-> sidecar's sections in the table above, such as your custom providers and
-> voice setup. It also drops the `structuralSettingsMigrated` flag, so the
-> next sidecar start re-runs a one-time migration that copies older settings
-> from Postgres back into the file. Back up the file before changing those
-> fields.
-
 
 ## Embeddings
 
