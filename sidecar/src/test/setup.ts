@@ -8,6 +8,9 @@ import { join } from "node:path";
 const dir = mkdtempSync(join(tmpdir(), "yarvis-sidecar-test-"));
 process.env.YARVIS_SETTINGS_PATH = join(dir, "settings.json");
 process.env.YARVIS_AGENTS_DIR = join(dir, "agents");
+// Likewise the other agents' homes, which the import scanners read.
+process.env.CLAUDE_HOME = join(dir, "claude");
+process.env.YARVIS_PI_HOME = join(dir, "pi");
 
 // A top-level afterAll in a preload runs once, after every test file.
 // process.on("exit") never fires under bun test.
