@@ -30,6 +30,14 @@ On this page:
    - **Run script** (optional). It adds a **Run** button that starts the app,
      for example `bun run dev`.
    - **Pull issues**. Tick it to show the repo's issues on the Issues tab.
+
+   To add many at once, click **Import…** instead. It lists the repos your
+   Claude Code and Pi sessions ran in, most recent first and already ticked.
+   Enter a parent folder (for example `~/src`) and click **Scan** to also list
+   the clones under it, one or two levels down; those start unticked. Repos
+   you've already registered are shown but can't be ticked. Import saves the
+   clone URL only. Yarvis still makes its own clone the first time you open a
+   workspace, and you can add scripts afterwards by editing the repo.
 3. Optional: install the GitHub CLI and the stack extension for the
    [Stack tab](#stacked-pull-requests)'s grouping and merge button:
    ```bash

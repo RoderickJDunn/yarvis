@@ -9,6 +9,7 @@ import {
   updateRepo,
 } from "../lib/repos";
 import { invalidatePrefix } from "../lib/resourceCache";
+import ImportDialog from "./ImportDialog";
 
 interface Draft {
   id?: string;
@@ -44,6 +45,7 @@ export default function ReposSection() {
   const [editingId, setEditingId] = useState<string | "new" | null>(null);
   const [draft, setDraft] = useState<Draft>(blankDraft);
   const [error, setError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -125,15 +127,31 @@ export default function ReposSection() {
 
   return (
     <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
+      {importing && (
+        <ImportDialog
+          initialTab="repos"
+          onClose={() => setImporting(false)}
+          onImported={(tab) => tab === "repos" && void refresh()}
+        />
+      )}
       <div className="mb-1 flex items-center justify-between">
         <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">Repositories</h2>
         {!isEditing && (
-          <button
-            onClick={beginNew}
-            className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 hover:bg-zinc-800"
-          >
-            Add repo
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setImporting(true)}
+              className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 hover:bg-zinc-800"
+            >
+              Import…
+            </button>
+            <button
+              onClick={beginNew}
+              className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 hover:bg-zinc-800"
+            >
+              Add repo
+            </button>
+          </div>
         )}
       </div>
       <p className="mb-4 text-xs text-zinc-500">

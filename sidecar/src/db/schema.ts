@@ -191,7 +191,9 @@ export type MemorySourceRef =
   | { type: "chat"; sessionId: string }
   | { type: "project"; projectId: string }
   | { type: "pr"; provider: string; key: string }
-  | { type: "issue"; provider: string; key: string };
+  | { type: "issue"; provider: string; key: string }
+  /** A memory file another agent keeps; `hash` is of the content as imported. */
+  | { type: "import"; tool: "claude-code" | "pi"; path: string; hash: string };
 
 export const memories = pgTable(
   "memories",

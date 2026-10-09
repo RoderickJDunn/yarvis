@@ -11,7 +11,8 @@ import {
   memSearch,
   type RecapResult,
 } from "../../lib/memory";
-import { primeCache, useCachedResource } from "../../lib/resourceCache";
+import { invalidatePrefix, primeCache, useCachedResource } from "../../lib/resourceCache";
+import ImportDialog from "../ImportDialog";
 import LoadingIndicator from "../LoadingIndicator";
 import Markdown from "../Markdown";
 import RefreshingIndicator from "../RefreshingIndicator";
@@ -91,6 +92,7 @@ export default function MemoryLibrary() {
   const [recapBusy, setRecapBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
 
   // Both values the browse loader reads are in the key, so changing the kind
   // filter or the page names a different resource rather than reusing the last.
@@ -184,6 +186,13 @@ export default function MemoryLibrary() {
 
   return (
     <div className="space-y-6">
+      {importing && (
+        <ImportDialog
+          initialTab="memories"
+          onClose={() => setImporting(false)}
+          onImported={(tab) => tab === "memories" && invalidatePrefix("memory:list:")}
+        />
+      )}
       <section>
         <h2 className="mb-2 text-sm font-medium uppercase tracking-wide text-zinc-500">Recap</h2>
         <div className="flex gap-2">
@@ -270,6 +279,13 @@ export default function MemoryLibrary() {
             {searching ? "Search results" : "All memories"}
           </h2>
           <RefreshingIndicator active={!searching && browseRes.refreshing} />
+          <button
+            type="button"
+            onClick={() => setImporting(true)}
+            className="rounded-md border border-zinc-700 px-2 py-1 text-sm hover:bg-zinc-800"
+          >
+            Import…
+          </button>
           <select
             value={kind}
             aria-label="Filter memories by kind"

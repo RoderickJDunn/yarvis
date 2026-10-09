@@ -233,6 +233,7 @@ copy of the app, or for debugging.
 | `YARVIS_LOG_DEV_TOKEN` | `1` makes a standalone sidecar (`bun run sidecar:dev`) print its API token instead of a fingerprint |
 | `TAURI_DEV_HOST` | Serve the Vite dev server on this host. Also turns on the HMR socket port. |
 | `CLAUDE_HOME` | Where Claude Code keeps sessions. Default `~/.claude`. |
+| `YARVIS_PI_HOME` | Where Pi keeps its sessions and memory, for the import. Default `~/.pi`. |
 | `AWS_PROFILE`, `AWS_REGION`, … | The usual AWS credential chain, for Bedrock |
 | `YARVIS_GITHUB_API_URL`, `YARVIS_GITHUB_GRAPHQL_URL` | Send GitHub REST and GraphQL requests to a local stand-in, such as the demo's fake GitHub. Set both or neither. |
 | `YARVIS_GOOGLE_CALENDAR_API_URL`, `YARVIS_GOOGLE_TOKEN_URL` | Send Google Calendar API and OAuth token requests to a local stand-in. Set both or neither. The Calendar value is a base, e.g. `http://127.0.0.1:4010/calendar/v3`. |

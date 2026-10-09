@@ -3,6 +3,7 @@ import { z } from "zod";
 import { MEMORY_KINDS, type MemoryKind } from "../db/schema.ts";
 import { fence, newNonce, untrustedWarning } from "../lib/fencing.ts";
 import type { MemoryService } from "./index.ts";
+import { projectKeys } from "./projects.ts";
 
 /**
  * Memory tools for the chat model: store durable facts the user shares, correct
@@ -61,9 +62,19 @@ export function buildMemoryTools(memory: MemoryService, sessionId: string) {
           .optional()
           .describe("Restrict the search to these kinds"),
         limit: z.number().int().min(1).max(20).optional(),
+        project: z
+          .string()
+          .max(200)
+          .optional()
+          .describe(
+            "The repo or project the question is about ('hypercube' or 'owner/repo'). Memories from it rank first; others still appear.",
+          ),
       }),
-      execute: async ({ query, kinds, limit }) => {
-        const results = await memory.search(query, limit ?? 5, { kinds });
+      execute: async ({ query, kinds, limit, project }) => {
+        const results = await memory.search(query, limit ?? 5, {
+          kinds,
+          preferProjects: project ? projectKeys(project) : undefined,
+        });
         const nonce = newNonce();
         return {
           warning: untrustedWarning(nonce),

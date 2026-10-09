@@ -141,6 +141,30 @@ describe("pgvector memory store", () => {
     expect(hits[0]!.kind).toBe("note");
   });
 
+  it("ranks the asking project's memory above an equally relevant one from elsewhere", async () => {
+    const text = "the deploy needs the staging kubeconfig";
+    await store.add(text, { metadata: { projects: ["acme/api", "api"] } });
+    await store.add(text, { metadata: { projects: ["acme/web", "web"] } });
+    await store.add("lunch is at noon on fridays");
+
+    for (const project of ["api", "web"]) {
+      const hits = await store.search(text, 2, { preferProjects: [project] });
+      expect((hits[0]!.metadata as { projects: string[] }).projects).toContain(project);
+      expect(hits).toHaveLength(2);
+    }
+  });
+
+  it("does not let a project's unrelated memory outrank a clearly better match", async () => {
+    await store.add("rotate the kafka TLS certificates before they expire");
+    await store.add("lunch is at noon on fridays", { metadata: { projects: ["api"] } });
+
+    const hits = await store.search("rotate the kafka TLS certificates", 2, {
+      preferProjects: ["api"],
+    });
+    expect(hits[0]!.content).toContain("kafka");
+    expect(hits).toHaveLength(2);
+  });
+
   it("stamps the producing embedder onto each memory", async () => {
     const rec = await store.add("stamped");
     const got = await store.get(rec.id);

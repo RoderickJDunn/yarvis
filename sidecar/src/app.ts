@@ -14,6 +14,7 @@ import { pingDb } from "./db/client.ts";
 import { createEventRoutes } from "./events/routes.ts";
 import { createGithubRoutes } from "./github/routes.ts";
 import { createCalendarRoutes, createGoogleCallbackRoutes } from "./google/routes.ts";
+import { createImportRoutes } from "./imports/routes.ts";
 import { createIssueRoutes } from "./issues/routes.ts";
 import { createJiraRoutes } from "./jira/routes.ts";
 import { createJobRoutes } from "./jobs/routes.ts";
@@ -145,6 +146,7 @@ export function createApp(config: Config, readiness: Readiness = createReadiness
   app.route("/api/azure", createAzureRoutes(config));
   app.route("/api/azure-boards", createAzureBoardsRoutes(config));
   app.route("/api/memory", createMemoryRoutes(config));
+  app.route("/api/import", createImportRoutes(config));
   app.route("/api/events", createEventRoutes(config));
   app.route("/api/projects", createProjectRoutes(config));
   app.route("/api/todos", createTodoRoutes(config));

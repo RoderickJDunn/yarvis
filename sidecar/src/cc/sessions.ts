@@ -11,7 +11,7 @@ import {
   type TranscriptEntry,
 } from "./parse.ts";
 
-function ccHome(): string {
+export function ccHome(): string {
   return process.env.CLAUDE_HOME ?? join(homedir(), ".claude");
 }
 
