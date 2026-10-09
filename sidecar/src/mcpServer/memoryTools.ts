@@ -4,6 +4,7 @@ import { MEMORY_KINDS } from "../db/schema.ts";
 import { fence, newNonce, untrustedWarning } from "../lib/fencing.ts";
 import { describeError } from "../llm/errors.ts";
 import type { MemoryRecord, MemoryService } from "../memory/index.ts";
+import { projectKeys } from "../memory/projects.ts";
 
 /**
  * The memory tools Yarvis serves over MCP, so Claude Code (or any other MCP
@@ -75,12 +76,21 @@ export function registerMemoryTools(server: McpServer, memory: () => Promise<Mem
       inputSchema: {
         query: z.string().min(1).max(MAX_QUERY_CHARS).describe("What to search for"),
         limit: z.number().int().min(1).max(20).optional().describe("How many hits to return"),
+        project: z
+          .string()
+          .max(200)
+          .optional()
+          .describe(
+            "The repo you are working in, as 'owner/repo' or its name. Memories saved in that project rank first; others still appear.",
+          ),
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async ({ query, limit }) => {
+    async ({ query, limit, project }) => {
       try {
-        const results = await (await memory()).search(query, limit ?? 5);
+        const results = await (await memory()).search(query, limit ?? 5, {
+          preferProjects: project ? projectKeys(project) : undefined,
+        });
         const nonce = newNonce();
         return jsonResult({
           warning: untrustedWarning(nonce),

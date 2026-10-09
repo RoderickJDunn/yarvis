@@ -52,6 +52,12 @@ export interface MemoryListOptions {
 export interface MemorySearchOptions {
   kinds?: readonly MemoryKind[];
   /**
+   * Keys (see `projectKeys`) of the project the search is asked from. A memory
+   * tagged with one of them ranks above an equally relevant one from elsewhere;
+   * nothing is excluded.
+   */
+  preferProjects?: readonly string[];
+  /**
    * Include superseded memories. Off by default, because a corrected fact
    * resurfacing in recall is exactly what superseding is meant to prevent.
    */
@@ -121,6 +127,19 @@ function toRecord(row: MemoryRowFields, score?: number): MemoryRecord {
     supersededAt: row.supersededAt ?? null,
     score,
   };
+}
+
+/**
+ * How much similarity a memory from the asking project is credited with.
+ * Relevant hits sit within a few tenths of each other, so this lifts a project's
+ * memory over a comparable one from elsewhere without letting an unrelated one
+ * jump a clearly better match.
+ */
+const PROJECT_BONUS = 0.1;
+
+function inProjects(record: MemoryRecord, keys: readonly string[]): boolean {
+  const projects = (record.metadata as { projects?: unknown } | null)?.projects;
+  return Array.isArray(projects) && projects.some((p) => keys.includes(p));
 }
 
 /** The columns every read selects; the embedding is deliberately not among them. */
@@ -200,17 +219,46 @@ export class PgVectorMemoryStore implements MemoryService {
     const conditions: SQL[] = [];
     if (options.kinds?.length) conditions.push(inArray(memories.kind, [...options.kinds]));
     if (!options.includeSuperseded) conditions.push(isNull(memories.supersededAt));
-    const rows = await this.db
-      .select({ ...RECORD_COLUMNS, distance })
-      .from(memories)
-      .where(conditions.length ? and(...conditions) : undefined)
-      .orderBy(distance)
-      .limit(limit);
-    const results = rows.map((r) => toRecord(r, 1 - Number(r.distance)));
+    const nearest = async (extra?: SQL) => {
+      const where = [...conditions, ...(extra ? [extra] : [])];
+      const rows = await this.db
+        .select({ ...RECORD_COLUMNS, distance })
+        .from(memories)
+        .where(where.length ? and(...where) : undefined)
+        .orderBy(distance)
+        .limit(limit);
+      return rows.map((r) => toRecord(r, 1 - Number(r.distance)));
+    };
+
+    const preferred = options.preferProjects ?? [];
+    let results: MemoryRecord[];
+    if (preferred.length === 0) {
+      results = await nearest();
+    } else {
+      // A separate query for the project's own memories, because a filter on the
+      // general query is applied after the ANN index picks candidates and could
+      // miss them. The two are merged on a boosted score; the score returned is
+      // still the plain similarity.
+      const keys = sql.join(
+        preferred.map((key) => sql`${key}`),
+        sql`, `,
+      );
+      const [general, own] = await Promise.all([
+        nearest(),
+        nearest(sql`jsonb_exists_any(${memories.metadata}->'projects', ARRAY[${keys}]::text[])`),
+      ]);
+      const ownIds = new Set(own.map((r) => r.id));
+      const rank = (r: MemoryRecord) =>
+        (r.score ?? 0) + (ownIds.has(r.id) || inProjects(r, preferred) ? PROJECT_BONUS : 0);
+      const merged = new Map([...general, ...own].map((r) => [r.id, r]));
+      results = [...merged.values()].sort((a, b) => rank(b) - rank(a)).slice(0, limit);
+    }
+
     const top = results[0]?.score;
     memoryDebug(
       "memory",
       `search q="${preview(query)}" → ${results.length} hits` +
+        (preferred.length ? ` preferring ${preferred.join(",")}` : "") +
         (top !== undefined ? ` (top score ${top.toFixed(3)})` : ""),
     );
     return results;
