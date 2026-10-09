@@ -5,10 +5,12 @@ import {
   CheckStep,
   DatabaseStep,
   FinishStep,
+  ImportStep,
   ProviderStep,
   SecretStoreStep,
   WelcomeStep,
 } from "./setupSteps";
+import { type StepAction, StepActionContext } from "./stepAction";
 
 interface Step {
   label: string;
@@ -21,12 +23,14 @@ const STEPS: Step[] = [
   { label: "Database", render: () => <DatabaseStep /> },
   { label: "LLM provider", render: () => <ProviderStep /> },
   { label: "Check", render: () => <CheckStep /> },
+  { label: "Import", render: () => <ImportStep /> },
   { label: "Next steps", render: (leaveFor) => <FinishStep onNavigate={leaveFor} /> },
 ];
 
 /**
  * The first-run setup guide: secret store, database, LLM provider, a check that
- * they work, then pointers to the optional integrations. Each step writes
+ * they work, an optional import from Claude Code and Pi, then pointers to the
+ * optional integrations. Each step writes
  * through the same calls the Settings sections use, so finishing here and
  * configuring in Settings leave the app in the same state.
  *
@@ -46,6 +50,7 @@ export default function SetupGuide({
   onStartTour: () => void;
 }) {
   const [stepIndex, setStepIndex] = useState(0);
+  const [action, setAction] = useState<StepAction | null>(null);
 
   // Reset on close rather than on open, so a reopened guide never paints (and
   // mounts, with its sidecar calls) the step it was last closed on.
@@ -114,7 +119,9 @@ export default function SetupGuide({
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-          {STEPS[stepIndex].render(leaveFor)}
+          <StepActionContext.Provider value={setAction}>
+            {STEPS[stepIndex].render(leaveFor)}
+          </StepActionContext.Provider>
         </div>
 
         <footer className="flex items-center gap-2 border-t border-zinc-800 px-5 py-3">
@@ -149,6 +156,28 @@ export default function SetupGuide({
                   className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium hover:bg-indigo-500"
                 >
                   Done
+                </button>
+              </>
+            ) : action ? (
+              <>
+                <span className="self-center text-xs text-zinc-400">{action.summary}</span>
+                <button
+                  type="button"
+                  onClick={() => setStepIndex(stepIndex + 1)}
+                  disabled={action.busy}
+                  className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 disabled:opacity-40"
+                >
+                  Skip
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (await action.run()) setStepIndex(stepIndex + 1);
+                  }}
+                  disabled={action.busy}
+                  className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium hover:bg-indigo-500 disabled:opacity-40"
+                >
+                  {action.busy ? "Importing…" : action.label}
                 </button>
               </>
             ) : (

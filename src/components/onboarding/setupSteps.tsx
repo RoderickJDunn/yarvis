@@ -1,17 +1,20 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useState } from "react";
 import { type DbHealthResponse, getDbHealth, getHealth } from "../../lib/api";
 import type { AppPlace } from "../../lib/appPlace";
 import { listProviders, type ProviderInfo } from "../../lib/chat";
 import { formatError } from "../../lib/errors";
 import { listSecretStatus, SECRETS, type SecretKey, setSecret } from "../../lib/keychain";
+import { memEmbeddingsConfig } from "../../lib/memory";
 import { configuredChatProviders } from "../../lib/onboarding";
-import { clearResourceCache } from "../../lib/resourceCache";
+import { clearResourceCache, invalidatePrefix } from "../../lib/resourceCache";
 import { restartAndWait } from "../../lib/restart";
 import { getSettings } from "../../lib/settings";
 import CustomProviderSection from "../CustomProviderSection";
 import { StatusDot } from "../Dashboard";
+import { countLabel, type ImportTab, ImportTabs, useImport } from "../ImportDialog";
 import { MaskedInput } from "../MaskedInput";
 import SecretBackendSection from "../SecretBackendSection";
+import { StepActionContext } from "./stepAction";
 
 const DEFAULT_DATABASE_URL =
   SECRETS.find((s) => s.key === "database_url")?.placeholder ?? "postgres://localhost:5432/yarvis";
@@ -389,6 +392,65 @@ export function CheckStep() {
 }
 
 /** Optional integrations. Keep in step with the table in docs/getting-started.md. */
+const onImported = (tab: ImportTab) => {
+  if (tab === "memories") invalidatePrefix("memory:list:");
+};
+
+export function ImportStep() {
+  // Null until known, and left null when the sidecar can't say: the tabs below
+  // report an unreachable database themselves.
+  const [offlineEmbedder, setOfflineEmbedder] = useState<boolean | null>(null);
+  useEffect(() => {
+    memEmbeddingsConfig()
+      .then((r) => setOfflineEmbedder(r.health.active.kind === "hash"))
+      .catch(() => setOfflineEmbedder(null));
+  }, []);
+
+  const state = useImport("memories", onImported);
+  const { memoryCount, repoCount, busy, runAll } = state;
+  const setAction = useContext(StepActionContext);
+  useEffect(() => {
+    const parts = [
+      memoryCount ? countLabel(memoryCount, "memory") : null,
+      repoCount ? countLabel(repoCount, "repo") : null,
+    ].filter(Boolean);
+    // Nothing ticked leaves the plain Next button, which then means what it says.
+    setAction(
+      parts.length
+        ? {
+            label: "Import and continue",
+            summary: `${parts.join(" · ")} selected`,
+            busy,
+            run: runAll,
+          }
+        : null,
+    );
+  }, [memoryCount, repoCount, busy, runAll, setAction]);
+  useEffect(() => () => setAction(null), [setAction]);
+
+  return (
+    <>
+      <StepHeading title="Bring in what your other agents know">
+        <p>
+          Import the memory files Claude Code and Pi keep, and register the repos you work in for
+          Workspaces. Tick what you want on both tabs, then press Import and continue below, or
+          Skip. You can run this again any time from Memory or Settings → Repositories.
+        </p>
+      </StepHeading>
+      {offlineEmbedder && (
+        <p className="mb-3 rounded-md border border-amber-800 bg-amber-950/40 px-3 py-2 text-xs text-amber-200">
+          No embeddings provider is set up yet, so imported memories get the offline embedder and
+          search finds them less reliably. You can import now and fix this later: add a Gemini key
+          or configure Settings → Embeddings, then press Re-embed all there.
+        </p>
+      )}
+      <div className="rounded-lg border border-zinc-800">
+        <ImportTabs state={state} />
+      </div>
+    </>
+  );
+}
+
 const OPTIONAL_FEATURES: { label: string; what: string; place: AppPlace }[] = [
   {
     label: "GitHub PRs and issues",
