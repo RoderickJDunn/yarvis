@@ -131,7 +131,7 @@ pgvector store the in-app chat uses:
 
 | Tool | What it does |
 | --- | --- |
-| `recall` | Searches memory by meaning |
+| `recall` | Searches memory by meaning. Pass `project` (the repo you're in) to rank that project's memories first. |
 | `remember` | Stores a durable fact |
 | `take_note` | Stores a quick note, which feeds the daily and weekly recaps |
 | `list_memories` | Lists memories, newest first, optionally by `kind` (`fact`, `note`, `session-summary`, …) |

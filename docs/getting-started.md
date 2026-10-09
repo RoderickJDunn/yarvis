@@ -158,8 +158,11 @@ it quits the app.
 
 The app starts with nothing configured, so on first launch it opens a **setup
 guide**. It covers the same ground as the steps below, plus choosing where
-secrets are kept (the macOS Keychain or 1Password), and finishes by offering a
-tour of each page. You can skip it and reopen it, or the tour, at any time from the
+secrets are kept (the macOS Keychain or 1Password). After the checks, an
+optional step imports your Claude Code and Pi memory files and registers the
+repos your sessions ran in (see
+[Importing from Claude Code and Pi](features/assistant.md#importing-from-claude-code-and-pi)).
+It finishes by offering a tour of each page. You can skip it and reopen it, or the tour, at any time from the
 **Help** button (the **?** at the bottom of the nav rail).
 
 To do the same by hand, open **Settings** (the gear at the bottom of the nav
@@ -208,7 +211,7 @@ Each integration is independent. Set up the ones you need, in any order.
 | Azure DevOps PRs and Azure Boards | Save an **Azure DevOps token** and set the organization URL under Settings → Credentials. Azure Boards also needs the **Work Items (read & write)** scope. | [PR review](features/pr-review.md), [Issues and tasks](features/issues-and-tasks.md) |
 | JIRA | Save a **JIRA API token** and set the base URL and account email. | [Issues and tasks](features/issues-and-tasks.md) |
 | Google Calendar and alarms | Create a Google OAuth client, then connect from the Calendar tab. | [Calendar and alarms](features/calendar-and-alarms.md) |
-| Better memory search | Add a Gemini key, or configure **Settings → Embeddings**. Without either, memory search uses a weaker offline embedder. | [Configuration](configuration.md#embeddings) |
+| Better memory search | Add a Gemini key, or configure **Settings → Embeddings**. Without either, memory search uses a weaker offline embedder. If you imported memories before setting this up, press **Re-embed all** there afterwards. | [Configuration](configuration.md#embeddings) |
 | Voice | Run the local speech server and point Settings → Voice at it. | [Voice server](voice-server.md) |
 | MCP servers | Add servers under **Settings → Tools & MCP**. | [MCP](features/mcp.md) |
 | Telegram | Create a bot with @BotFather and save its token. | [Telegram](features/telegram.md) |

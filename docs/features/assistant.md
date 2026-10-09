@@ -161,6 +161,51 @@ they can be matched exactly.
 When a fact changes, the assistant corrects the memory instead of storing a
 contradiction. The old version stays for the record but drops out of search.
 
+### Importing from Claude Code and Pi
+
+**Memory → All memories → Import…** reads the memory files other agents keep
+on this machine:
+
+- Claude Code's memory files, `~/.claude/projects/*/memory/*.md` and
+  `~/.claude/memory/*.md`. A `feedback` memory becomes `agent-feedback`,
+  `project` stays `project`, `user` becomes `preference`, and `reference`
+  becomes `fact`. The `MEMORY.md` index is skipped.
+- Pi's [pi-memory-md](https://github.com/VandeeFeng/pi-memory-md) files, in
+  `~/.pi/memory-md` or the `localPath` set in `~/.pi/agent/settings.json`.
+  `USER.md` becomes `preference`, everything else `fact`. `TASK.md`
+  templates are skipped.
+
+The list is grouped by tool and project. Each file shows whether it's
+**new**, **changed** since you imported it, or already **imported**. Everything
+except the already imported files starts ticked. Expand a row to read exactly
+what will be stored.
+
+Each memory starts with where it came from (for example
+`Claude Code memory (~/Work/app): …`), so a project's memory is still
+recognisable when it's recalled elsewhere. Known credential shapes are
+redacted, and a file longer than 6,000 characters is cut short.
+
+A memory from a project folder is also tagged with that project: the
+repo's `owner/repo` when the folder is a clone, and its folder name. Memories
+from your home folder and Claude Code's global memory folder are untagged.
+Imported memories are not limited to their project. Any recall can find them,
+but a recall that names a project (`recall` takes an optional `project`, such
+as `hypercube` or `owner/repo`) ranks that project's memories above equally
+relevant ones from elsewhere. A clearly better match from another project
+still comes first.
+
+Importing again is safe. Unchanged files are skipped, and a file you've
+edited replaces its old memory the same way a correction does. Nothing syncs
+in the background, so re-run the import when you want the changes.
+
+`CLAUDE.md` and `AGENTS.md` files aren't imported. They're instructions, not
+memories, and the agents that own them already load them. Transcripts aren't
+imported either. The transcript digest below covers Claude Code sessions.
+
+Like any memory, imported ones are embedded with your embeddings provider and
+can be read back by Claude Code sessions over MCP and by the Telegram bot.
+Untick anything you don't want there.
+
 ### The activity log
 
 Yarvis records meaningful actions as events. Examples:
